@@ -1,9 +1,9 @@
 import sqlite3
-import os
-from config import LOCAL_DB, CONCRETE_GRADES
+import json
+from config import DB_PATH, CONCRETE_GRADES
 
 def get_db():
-    conn = sqlite3.connect(LOCAL_DB)
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -11,61 +11,149 @@ def init_db():
     conn = get_db()
     c = conn.cursor()
 
-    c.execute('''CREATE TABLE IF NOT EXISTS cable_car_status (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        cable_car_id INTEGER UNIQUE NOT NULL,
-        latitude REAL,
-        longitude REAL,
-        altitude REAL,
+    c.execute('''CREATE TABLE IF NOT EXISTS cable_cars (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        grade_id INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'idle',
+        direction TEXT DEFAULT 'idle',
+        state TEXT DEFAULT 'stopped',
+        state_label TEXT DEFAULT '停止',
+        manual_state TEXT DEFAULT 'normal',
+        location TEXT DEFAULT '',
+        latitude REAL DEFAULT 0,
+        longitude REAL DEFAULT 0,
+        altitude REAL DEFAULT 0,
         xspeed REAL DEFAULT 0,
         yspeed REAL DEFAULT 0,
-        direction TEXT DEFAULT '停止',
         start INTEGER DEFAULT 0,
-        grade TEXT DEFAULT '',
-        status TEXT DEFAULT '空闲',
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TEXT,
+        synced_at TEXT
     )''')
+    
+    # 迁移：添加 manual_state 列（如果不存在）
+    try:
+        c.execute('SELECT manual_state FROM cable_cars LIMIT 1')
+    except:
+        c.execute('ALTER TABLE cable_cars ADD COLUMN manual_state TEXT DEFAULT "normal"')
+        conn.commit()
+        print('[DB] 已添加 manual_state 列到 cable_cars 表')
 
-    c.execute('''CREATE TABLE IF NOT EXISTS vehicle_status (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tid INTEGER UNIQUE NOT NULL,
-        user_name TEXT DEFAULT '',
-        result_x REAL,
-        result_y REAL,
+    c.execute('''CREATE TABLE IF NOT EXISTS vehicles (
+        id INTEGER PRIMARY KEY,
+        tid INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        grade_id INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'idle',
+        direction TEXT DEFAULT 'idle',
+        result_x REAL DEFAULT 0,
+        result_y REAL DEFAULT 0,
         speed REAL DEFAULT 0,
-        direction TEXT DEFAULT '停止',
-        grade TEXT DEFAULT '',
-        status TEXT DEFAULT '空闲',
-        target_cable_car_id INTEGER DEFAULT NULL,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        lat REAL DEFAULT 0,
+        lon REAL DEFAULT 0,
+        user_name TEXT DEFAULT '',
+        route TEXT DEFAULT '',
+        updated_at TEXT,
+        synced_at TEXT
     )''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS dispatch_tasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        vehicle_tid INTEGER NOT NULL,
         cable_car_id INTEGER NOT NULL,
-        grade TEXT NOT NULL,
-        status TEXT DEFAULT '待执行',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        matched_at TIMESTAMP,
-        completed_at TIMESTAMP
+        vehicle_id INTEGER NOT NULL,
+        grade_id INTEGER NOT NULL,
+        status TEXT DEFAULT 'pending',
+        created_at TEXT NOT NULL,
+        assigned_at TEXT,
+        completed_at TEXT,
+        cancelled_at TEXT,
+        note TEXT DEFAULT '',
+        FOREIGN KEY (cable_car_id) REFERENCES cable_cars(id),
+        FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
     )''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS grade_config (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE NOT NULL
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        color TEXT NOT NULL
     )''')
 
     for grade in CONCRETE_GRADES:
-        c.execute('INSERT OR IGNORE INTO grade_config (name) VALUES (?)', (grade,))
+        c.execute('INSERT OR REPLACE INTO grade_config (id, name, color) VALUES (?, ?, ?)',
+                  (grade['id'], grade['name'], grade['color']))
 
     for i in range(1, 5):
-        c.execute('INSERT OR IGNORE INTO cable_car_status (cable_car_id, direction, status) VALUES (?, ?, ?)',
-                   (i, '停止', '空闲'))
+        c.execute('INSERT OR IGNORE INTO cable_cars (id, name) VALUES (?, ?)',
+                  (i, f'{i}号缆机'))
 
     conn.commit()
     conn.close()
-    print('数据库初始化完成')
 
-if __name__ == '__main__':
-    init_db()
+def reset_vehicle_grades():
+    conn = get_db()
+    conn.execute('UPDATE vehicles SET grade_id = 0')
+    conn.commit()
+    conn.close()
+
+def update_cable_car_grade(car_id, grade_id):
+    conn = get_db()
+    conn.execute('UPDATE cable_cars SET grade_id = ? WHERE id = ?', (grade_id, car_id))
+    conn.commit()
+    conn.close()
+
+def update_cable_car_state(car_id, manual_state):
+    conn = get_db()
+    conn.execute('UPDATE cable_cars SET manual_state = ? WHERE id = ?', (manual_state, car_id))
+    conn.commit()
+    conn.close()
+
+def update_vehicle_grade(vehicle_id, grade_id):
+    conn = get_db()
+    conn.execute('UPDATE vehicles SET grade_id = ? WHERE id = ?', (grade_id, vehicle_id))
+    conn.commit()
+    conn.close()
+
+def create_dispatch_task(cable_car_id, vehicle_id, grade_id):
+    conn = get_db()
+    from datetime import datetime
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    cursor = conn.execute(
+        'INSERT INTO dispatch_tasks (cable_car_id, vehicle_id, grade_id, status, created_at) VALUES (?, ?, ?, ?, ?)',
+        (cable_car_id, vehicle_id, grade_id, 'assigned', now)
+    )
+    conn.execute('UPDATE cable_cars SET status = ? WHERE id = ?', ('assigned', cable_car_id))
+    conn.execute('UPDATE vehicles SET status = ? WHERE id = ?', ('assigned', vehicle_id))
+    conn.commit()
+    task_id = cursor.lastrowid
+    conn.close()
+    return task_id
+
+def complete_dispatch_task(task_id):
+    conn = get_db()
+    from datetime import datetime
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    task = conn.execute('SELECT cable_car_id, vehicle_id FROM dispatch_tasks WHERE id = ?', (task_id,)).fetchone()
+    if task:
+        conn.execute('UPDATE dispatch_tasks SET status = ?, completed_at = ? WHERE id = ?',
+                      ('completed', now, task_id))
+        conn.execute('UPDATE cable_cars SET status = ?, grade_id = 0 WHERE id = ?',
+                      ('idle', task['cable_car_id']))
+        conn.execute('UPDATE vehicles SET status = ?, grade_id = 0 WHERE id = ?',
+                      ('idle', task['vehicle_id']))
+    conn.commit()
+    conn.close()
+
+def cancel_dispatch_task(task_id):
+    conn = get_db()
+    from datetime import datetime
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    task = conn.execute('SELECT cable_car_id, vehicle_id FROM dispatch_tasks WHERE id = ?', (task_id,)).fetchone()
+    if task:
+        conn.execute('UPDATE dispatch_tasks SET status = ?, cancelled_at = ? WHERE id = ?',
+                      ('cancelled', now, task_id))
+        conn.execute('UPDATE cable_cars SET status = ?, grade_id = 0 WHERE id = ?',
+                      ('idle', task['cable_car_id']))
+        conn.execute('UPDATE vehicles SET status = ?, grade_id = 0 WHERE id = ?',
+                      ('idle', task['vehicle_id']))
+    conn.commit()
+    conn.close()

@@ -1,124 +1,142 @@
-from flask import Flask, jsonify, request, render_template
-from database import init_db, get_db
+import json
+from flask import Flask, render_template, jsonify, request
+from database import init_db, get_db, update_cable_car_grade, update_cable_car_state, update_vehicle_grade, create_dispatch_task, complete_dispatch_task, cancel_dispatch_task
 from data_sync import sync_all, start_sync_loop, stop_sync_loop
-from matcher import (
-    find_returning_cable_cars, find_going_vehicles,
-    match_vehicle_to_cable_car, create_dispatch_task,
-    complete_dispatch_task, cancel_dispatch_task,
-    get_all_dispatch_tasks, get_dispatch_stats
-)
-import os
+from config import CONCRETE_GRADES
 
-app = Flask(__name__,
-            template_folder=os.path.join(os.path.dirname(__file__), 'templates'),
-            static_folder=os.path.join(os.path.dirname(__file__), 'static'))
+app = Flask(__name__)
+app.debug = True  # 启用调试模式，自动重载后端代码
+
+init_db()
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/api/cable_cars', methods=['GET'])
-def get_cable_cars():
+@app.route('/api/status')
+def get_status():
     db = get_db()
-    c = db.cursor()
-    c.execute('SELECT * FROM cable_car_status ORDER BY cable_car_id')
-    rows = c.fetchall()
+    cable_cars = [dict(row) for row in db.execute('SELECT * FROM cable_cars ORDER BY id').fetchall()]
+    vehicles = [dict(row) for row in db.execute('SELECT * FROM vehicles ORDER BY tid').fetchall()]
+    active_tasks = [dict(row) for row in db.execute(
+        '''SELECT t.*, cc.name as cable_car_name, v.name as vehicle_name, gc.name as grade_name, gc.color as grade_color
+           FROM dispatch_tasks t
+           LEFT JOIN cable_cars cc ON t.cable_car_id = cc.id
+           LEFT JOIN vehicles v ON t.vehicle_id = v.id
+           LEFT JOIN grade_config gc ON t.grade_id = gc.id
+           WHERE t.status IN ('assigned', 'pending')
+           ORDER BY t.created_at DESC'''
+    ).fetchall()]
+    recent_tasks = [dict(row) for row in db.execute(
+        '''SELECT t.*, cc.name as cable_car_name, v.name as vehicle_name, gc.name as grade_name, gc.color as grade_color
+           FROM dispatch_tasks t
+           LEFT JOIN cable_cars cc ON t.cable_car_id = cc.id
+           LEFT JOIN vehicles v ON t.vehicle_id = v.id
+           LEFT JOIN grade_config gc ON t.grade_id = gc.id
+           WHERE t.status IN ('completed', 'cancelled')
+           ORDER BY t.created_at DESC LIMIT 20'''
+    ).fetchall()]
     db.close()
-    return jsonify([dict(r) for r in rows])
 
-@app.route('/api/vehicles', methods=['GET'])
-def get_vehicles():
-    db = get_db()
-    c = db.cursor()
-    c.execute('SELECT * FROM vehicle_status ORDER BY tid')
-    rows = c.fetchall()
-    db.close()
-    return jsonify([dict(r) for r in rows])
+    return jsonify({
+        'cable_cars': cable_cars,
+        'vehicles': vehicles,
+        'grades': CONCRETE_GRADES,
+        'active_tasks': active_tasks,
+        'recent_tasks': recent_tasks
+    })
 
-@app.route('/api/cable_car/<int:cable_car_id>/grade', methods=['POST'])
-def set_cable_car_grade(cable_car_id):
-    grade = request.json.get('grade', '')
-    db = get_db()
-    c = db.cursor()
-    c.execute('UPDATE cable_car_status SET grade = ? WHERE cable_car_id = ?', (grade, cable_car_id))
-    db.commit()
-    db.close()
-    return jsonify({'success': True, 'cable_car_id': cable_car_id, 'grade': grade})
+@app.route('/api/cable-car/<int:car_id>/grade', methods=['POST'])
+def set_cable_car_grade(car_id):
+    data = request.json
+    grade_id = data.get('grade_id', 0)
+    update_cable_car_grade(car_id, grade_id)
+    return jsonify({'success': True})
 
-@app.route('/api/vehicle/<int:tid>/grade', methods=['POST'])
-def set_vehicle_grade(tid):
-    grade = request.json.get('grade', '')
-    db = get_db()
-    c = db.cursor()
-    c.execute('UPDATE vehicle_status SET grade = ? WHERE tid = ?', (grade, tid))
-    db.commit()
-    db.close()
-    return jsonify({'success': True, 'tid': tid, 'grade': grade})
+@app.route('/api/cable-car/<int:car_id>/state', methods=['POST'])
+def set_cable_car_state_api(car_id):
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': '无效的请求数据'}), 400
+        
+        manual_state = data.get('manual_state', 'normal')
+        if not manual_state:
+            return jsonify({'success': False, 'message': '状态值不能为空'}), 400
+            
+        update_cable_car_state(car_id, manual_state)
+        return jsonify({'success': True, 'message': '状态更新成功'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
 
-@app.route('/api/match', methods=['GET'])
-def auto_match():
-    matches = match_vehicle_to_cable_car()
-    return jsonify({'matches': matches})
+@app.route('/api/vehicle/<int:vehicle_id>/grade', methods=['POST'])
+def set_vehicle_grade(vehicle_id):
+    data = request.json
+    grade_id = data.get('grade_id', 0)
+    update_vehicle_grade(vehicle_id, grade_id)
+    return jsonify({'success': True})
 
 @app.route('/api/dispatch', methods=['POST'])
 def dispatch():
     data = request.json
     cable_car_id = data.get('cable_car_id')
-    vehicle_tid = data.get('vehicle_tid')
-    grade = data.get('grade', '')
+    vehicle_id = data.get('vehicle_id')
+    grade_id = data.get('grade_id')
 
-    if not cable_car_id or not vehicle_tid:
-        return jsonify({'success': False, 'msg': '参数不完整'}), 400
+    if not all([cable_car_id, vehicle_id, grade_id]):
+        return jsonify({'success': False, 'message': '参数不完整'}), 400
 
-    result = create_dispatch_task(cable_car_id, vehicle_tid, grade)
-    return jsonify({'success': result})
-
-@app.route('/api/dispatch/<int:task_id>/complete', methods=['POST'])
-def complete_task(task_id):
-    result = complete_dispatch_task(task_id)
-    return jsonify({'success': result})
-
-@app.route('/api/dispatch/<int:task_id>/cancel', methods=['POST'])
-def cancel_task(task_id):
-    result = cancel_dispatch_task(task_id)
-    return jsonify({'success': result})
-
-@app.route('/api/tasks', methods=['GET'])
-def get_tasks():
-    tasks = get_all_dispatch_tasks()
-    return jsonify(tasks)
-
-@app.route('/api/stats', methods=['GET'])
-def get_stats():
-    stats = get_dispatch_stats()
-    return jsonify(stats)
-
-@app.route('/api/grades', methods=['GET'])
-def get_grades():
     db = get_db()
-    c = db.cursor()
-    c.execute('SELECT * FROM grade_config ORDER BY id')
-    rows = c.fetchall()
+    car = db.execute('SELECT * FROM cable_cars WHERE id = ?', (cable_car_id,)).fetchone()
+    vehicle = db.execute('SELECT * FROM vehicles WHERE id = ?', (vehicle_id,)).fetchone()
+
+    if not car or not vehicle:
+        db.close()
+        return jsonify({'success': False, 'message': '缆机或车辆不存在'}), 404
+
+    if car['grade_id'] != grade_id or vehicle['grade_id'] != grade_id:
+        db.close()
+        return jsonify({'success': False, 'message': '级配不匹配'}), 400
+
+    existing = db.execute(
+        'SELECT id FROM dispatch_tasks WHERE cable_car_id = ? AND status IN ("assigned","pending")',
+        (cable_car_id,)
+    ).fetchone()
+    if existing:
+        db.close()
+        return jsonify({'success': False, 'message': '该缆机已有进行中的任务'}), 400
+
+    existing_v = db.execute(
+        'SELECT id FROM dispatch_tasks WHERE vehicle_id = ? AND status IN ("assigned","pending")',
+        (vehicle_id,)
+    ).fetchone()
+    if existing_v:
+        db.close()
+        return jsonify({'success': False, 'message': '该车辆已有进行中的任务'}), 400
+
     db.close()
-    return jsonify([dict(r) for r in rows])
+    task_id = create_dispatch_task(cable_car_id, vehicle_id, grade_id)
+    return jsonify({'success': True, 'task_id': task_id})
+
+@app.route('/api/dispatch/<int:task_id>/complete', methods=['PUT'])
+def complete_task(task_id):
+    complete_dispatch_task(task_id)
+    return jsonify({'success': True})
+
+@app.route('/api/dispatch/<int:task_id>/cancel', methods=['PUT'])
+def cancel_task(task_id):
+    cancel_dispatch_task(task_id)
+    return jsonify({'success': True})
 
 @app.route('/api/sync', methods=['POST'])
 def manual_sync():
     result = sync_all()
     return jsonify({'success': result})
 
-@app.route('/api/sync/start', methods=['POST'])
-def start_sync():
-    start_sync_loop()
-    return jsonify({'success': True})
-
-@app.route('/api/sync/stop', methods=['POST'])
-def stop_sync():
-    stop_sync_loop()
-    return jsonify({'success': True})
-
 if __name__ == '__main__':
     init_db()
-    sync_all()
     start_sync_loop()
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    try:
+        app.run(host='0.0.0.0', port=5001, debug=False, threaded=True)
+    finally:
+        stop_sync_loop()
