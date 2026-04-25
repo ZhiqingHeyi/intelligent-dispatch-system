@@ -1,0 +1,23 @@
+{
+  "name": "dispatch-center-vue",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173 --host",
+    "build": "vue-tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.4.15",
+    "pinia": "^2.1.7",
+    "axios": "^1.6.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.3",
+    "@vue/tsconfig": "^0.5.1",
+    "typescript": "~5.3.3",
+    "vite": "^5.0.11",
+    "vue-tsc": "^1.8.27"
+  }
+}
