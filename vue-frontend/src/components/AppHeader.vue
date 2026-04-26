@@ -8,6 +8,10 @@
       <div class="deco-dots">
         <span></span><span></span><span></span>
       </div>
+      <div class="developer-badge">
+        <span class="developer-icon">◆</span>
+        <span class="developer-text">葛洲坝二公司自主研发</span>
+      </div>
     </div>
     
     <!-- 中间标题区域 -->
@@ -253,6 +257,47 @@ onUnmounted(() => {
   gap: 10px;
   margin-top: 4px;
   position: relative;
+}
+
+.header-deco-left .developer-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+  padding: 3px 10px;
+  background: linear-gradient(90deg, 
+    rgba(0, 212, 255, 0.08) 0%, 
+    rgba(0, 212, 255, 0.15) 50%, 
+    rgba(0, 212, 255, 0.08) 100%);
+  border: 1px solid rgba(0, 212, 255, 0.25);
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--accent-blue);
+  letter-spacing: 1px;
+  white-space: nowrap;
+  animation: badge-glow 3s ease-in-out infinite;
+}
+
+.header-deco-left .developer-icon {
+  font-size: 8px;
+  color: var(--accent-green);
+  animation: icon-pulse 2s ease-in-out infinite;
+}
+
+@keyframes badge-glow {
+  0%, 100% { 
+    box-shadow: 0 0 4px rgba(0, 212, 255, 0.2);
+    border-color: rgba(0, 212, 255, 0.3);
+  }
+  50% { 
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.4);
+    border-color: rgba(0, 212, 255, 0.5);
+  }
+}
+
+@keyframes icon-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
 }
 
 .subtitle-text {

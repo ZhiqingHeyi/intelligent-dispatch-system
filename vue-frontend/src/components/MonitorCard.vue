@@ -27,18 +27,47 @@
     </div>
     <div class="monitor-info">
       <span class="monitor-label">{{ label }}</span>
-      <span class="monitor-value" :style="{ color }">{{ value }}</span>
+      <div class="monitor-value-row">
+        <span class="monitor-value" :style="{ color }">{{ value }}</span>
+        <Transition name="trend">
+          <span 
+            v-if="trend" 
+            class="monitor-trend"
+            :class="trend"
+          >
+            {{ trend === 'up' ? '▲' : '▼' }}
+          </span>
+        </Transition>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { watch, ref } from 'vue'
+
+const props = defineProps<{
   icon: 'return' | 'going' | 'active' | 'completed'
   label: string
   value: number
   color: string
 }>()
+
+const trend = ref<'up' | 'down' | null>(null)
+let trendTimer: number | null = null
+
+watch(() => props.value, (newVal, oldVal) => {
+  if (newVal > (oldVal ?? 0)) {
+    trend.value = 'up'
+  } else if (newVal < (oldVal ?? 0)) {
+    trend.value = 'down'
+  }
+  
+  if (trendTimer) clearTimeout(trendTimer)
+  trendTimer = window.setTimeout(() => {
+    trend.value = null
+  }, 3000)
+})
 </script>
 
 <style scoped>
@@ -86,10 +115,40 @@ defineProps<{
   letter-spacing: 1px;
 }
 
+.monitor-value-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .monitor-value {
   font-family: 'Orbitron', monospace;
   font-size: 22px;
   font-weight: 700;
   line-height: 1;
+}
+
+.monitor-trend {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.monitor-trend.up {
+  color: var(--accent-green);
+}
+
+.monitor-trend.down {
+  color: var(--accent-red);
+}
+
+.trend-enter-active,
+.trend-leave-active {
+  transition: all 0.3s ease;
+}
+
+.trend-enter-from,
+.trend-leave-to {
+  opacity: 0;
+  transform: scale(0.5);
 }
 </style>

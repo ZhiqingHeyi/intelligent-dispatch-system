@@ -9,31 +9,95 @@
       
       <main class="main-content">
         <!-- 左侧：缆机状态 -->
-        <CableCarPanel />
+        <CableCarPanel 
+          @open-grade-modal="openGradeModal"
+          @open-state-modal="openStateModal"
+        />
         
         <!-- 中间：调度匹配 -->
         <MatchPanel />
         
         <!-- 右侧：运输车辆 -->
-        <VehiclePanel />
+        <VehiclePanel @open-grade-modal="openGradeModal" />
       </main>
+      
+      <!-- 级配设置弹窗 -->
+      <GradeModal
+        v-model="gradeModal.show"
+        :target-id="gradeModal.targetId"
+        :target-name="gradeModal.targetName"
+        :current-grade-id="gradeModal.currentGradeId"
+        :type="gradeModal.type"
+      />
+      
+      <!-- 状态设置弹窗 -->
+      <StateModal
+        v-model="stateModal.show"
+        :target-id="stateModal.targetId"
+        :target-name="stateModal.targetName"
+        :current-state="stateModal.currentState"
+      />
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, reactive } from 'vue'
 import { useDispatchStore } from '@/stores/dispatch'
 import AppHeader from '@/components/AppHeader.vue'
 import LoadingScreen from '@/components/LoadingScreen.vue'
 import CableCarPanel from '@/components/CableCarPanel.vue'
 import MatchPanel from '@/components/MatchPanel.vue'
 import VehiclePanel from '@/components/VehiclePanel.vue'
+import GradeModal from '@/components/GradeModal.vue'
+import StateModal from '@/components/StateModal.vue'
 
 const store = useDispatchStore()
 const loading = ref(true)
 const initialized = ref(false)
 let intervalId: number | null = null
+
+// 弹窗状态
+const gradeModal = reactive({
+  show: false,
+  targetId: null as number | null,
+  targetName: '',
+  currentGradeId: 0,
+  type: 'cable_car' as 'cable_car' | 'vehicle'
+})
+
+const stateModal = reactive({
+  show: false,
+  targetId: null as number | null,
+  targetName: '',
+  currentState: 'normal'
+})
+
+// 打开级配弹窗
+const openGradeModal = (data: { 
+  id: number
+  name: string
+  gradeId: number
+  type: 'cable_car' | 'vehicle'
+}) => {
+  gradeModal.targetId = data.id
+  gradeModal.targetName = data.name
+  gradeModal.currentGradeId = data.gradeId
+  gradeModal.type = data.type
+  gradeModal.show = true
+}
+
+// 打开状态弹窗
+const openStateModal = (data: {
+  id: number
+  name: string
+  currentState: string
+}) => {
+  stateModal.targetId = data.id
+  stateModal.targetName = data.name
+  stateModal.currentState = data.currentState
+  stateModal.show = true
+}
 
 onMounted(async () => {
   await store.fetchData()

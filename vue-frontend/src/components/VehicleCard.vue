@@ -3,41 +3,38 @@
     class="vehicle-card"
     :class="{ 
       selected: isSelected,
-      going: vehicle.direction === 'going'
+      going: vehicle.direction === 'going',
+      returning: vehicle.direction === 'returning',
+      assigned: vehicle.status === 'assigned'
     }"
-    @click="$emit('select')"
+    @click="handleClick"
   >
     <div class="card-glow-border"></div>
     
     <div class="vc-top">
       <span class="vc-name">{{ vehicle.name }}</span>
       <span 
-        v-if="grade"
-        class="vc-grade"
-        :style="{
-          background: `${grade.color}18`,
-          color: grade.color,
-          border: `1px solid ${grade.color}44`
-        }"
+        class="vc-status"
+        :class="statusClass"
+        :style="statusStyle"
       >
-        {{ grade.name }}
-      </span>
-      <span v-else class="vc-grade no-grade" @click.stop="$emit('set-grade')">
-        未分配
+        {{ statusLabel }}
       </span>
     </div>
     
-    <div class="vc-info">
-      <div class="vc-info-item">
-        <span class="label">位置</span>
-        <span class="value">{{ vehicle.result_x?.toFixed(1) || '-' }}, {{ vehicle.result_y?.toFixed(1) || '-' }}</span>
-      </div>
-      <div class="vc-info-item">
-        <span class="label">速度</span>
-        <span class="value" :class="{ active: vehicle.speed > 0 }">
-          {{ vehicle.speed?.toFixed(1) || '0.0' }}
-        </span>
-      </div>
+    <div class="vc-bottom">
+      <span 
+        class="vc-grade-badge"
+        :class="{ 'no-grade': !grade }"
+        :style="grade ? {
+          background: grade.color + '18',
+          color: grade.color,
+          border: '1px solid ' + grade.color + '44'
+        } : {}"
+        @click.stop="$emit('set-grade')"
+      >
+        {{ grade ? grade.name : '设置级配' }}
+      </span>
     </div>
   </div>
 </template>
@@ -47,12 +44,20 @@ import { computed } from 'vue'
 import { useDispatchStore } from '@/stores/dispatch'
 import type { Vehicle } from '@/types'
 
+const DIRECTION_LABELS: Record<string, string> = {
+  returning: '返程',
+  going: '送料',
+  stopped: '停止',
+  idle: '待命',
+  assigned: '已调度'
+}
+
 const props = defineProps<{
   vehicle: Vehicle
   isSelected: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   select: []
   'set-grade': []
 }>()
@@ -60,6 +65,39 @@ defineEmits<{
 const store = useDispatchStore()
 
 const grade = computed(() => store.grades.find(g => g.id === props.vehicle.grade_id))
+
+const statusLabel = computed(() => {
+  return DIRECTION_LABELS[props.vehicle.direction] || DIRECTION_LABELS[props.vehicle.status] || '待命'
+})
+
+const statusClass = computed(() => {
+  const d = props.vehicle.direction
+  const s = props.vehicle.status
+  if (s === 'assigned') return 'assigned'
+  if (d === 'going') return 'going'
+  if (d === 'returning') return 'returning'
+  return 'stopped'
+})
+
+const statusStyle = computed(() => {
+  const styles: Record<string, { bg: string; color: string; border: string }> = {
+    assigned: { bg: 'rgba(192, 132, 252, 0.12)', color: '#c084fc', border: 'rgba(192, 132, 252, 0.25)' },
+    going: { bg: 'rgba(0, 212, 255, 0.12)', color: '#00d4ff', border: 'rgba(0, 212, 255, 0.25)' },
+    returning: { bg: 'rgba(0, 255, 136, 0.12)', color: '#00ff88', border: 'rgba(0, 255, 136, 0.25)' },
+    stopped: { bg: 'rgba(90, 99, 128, 0.12)', color: '#5a6380', border: 'rgba(90, 99, 128, 0.25)' }
+  }
+  const s = styles[statusClass.value] || styles.stopped
+  return {
+    background: s.bg,
+    color: s.color,
+    border: `1px solid ${s.border}`
+  }
+})
+
+const handleClick = () => {
+  if (props.vehicle.status === 'assigned') return
+  emit('select')
+}
 </script>
 
 <style scoped>
@@ -87,6 +125,12 @@ const grade = computed(() => store.grades.find(g => g.id === props.vehicle.grade
 .vehicle-card.going {
   border-color: rgba(0, 212, 255, 0.35);
   animation: going-pulse 2s ease-in-out infinite;
+}
+
+.vehicle-card.assigned {
+  border-color: rgba(192, 132, 252, 0.35);
+  opacity: 0.75;
+  cursor: not-allowed;
 }
 
 @keyframes going-pulse {
@@ -125,48 +169,41 @@ const grade = computed(() => store.grades.find(g => g.id === props.vehicle.grade
   color: var(--text-primary);
 }
 
-.vc-grade {
+.vc-status {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.vc-bottom {
+  display: flex;
+  align-items: center;
+}
+
+.vc-grade-badge {
   font-size: 10px;
   padding: 2px 8px;
   border-radius: 4px;
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.vc-grade.no-grade {
+.vc-grade-badge:hover {
+  filter: brightness(1.3);
+  transform: scale(1.05);
+}
+
+.vc-grade-badge.no-grade {
   background: rgba(74, 82, 112, 0.1);
   color: var(--text-muted);
   border: 1px dashed var(--text-muted);
 }
 
-.vc-grade.no-grade:hover {
+.vc-grade-badge.no-grade:hover {
   background: rgba(74, 82, 112, 0.2);
-}
-
-.vc-info {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.vc-info-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 11px;
-}
-
-.vc-info-item .label {
-  color: var(--text-muted);
-}
-
-.vc-info-item .value {
-  color: var(--text-primary);
-  font-family: 'Orbitron', monospace;
-}
-
-.vc-info-item .value.active {
-  color: var(--accent-green);
 }
 </style>

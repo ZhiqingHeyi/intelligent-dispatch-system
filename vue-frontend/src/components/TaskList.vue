@@ -1,39 +1,42 @@
 <template>
   <div class="task-panel">
     <div class="task-section">
-      <h4>当前任务 ({{ store.activeTasks.length }})</h4>
+      <h3>当前任务</h3>
       <div class="task-list">
-        <div 
-          v-for="task in store.activeTasks" 
+        <div
+          v-for="task in store.activeTasks"
           :key="task.id"
-          class="task-item active"
+          class="task-card active"
         >
-          <span class="task-dot" :style="{ background: task.grade_color }"></span>
-          <span class="task-text">
-            {{ task.cable_car_name }} ← {{ task.vehicle_name }}
-          </span>
+          <span class="task-grade-dot" :style="{ background: task.grade_color || '#5a6380' }"></span>
+          <div class="task-info">
+            <div class="task-title">{{ task.cable_car_name }} ← {{ task.vehicle_name }}</div>
+            <div class="task-meta">{{ task.grade_name || '' }} · {{ task.created_at || '' }}</div>
+          </div>
+          <div class="task-actions">
+            <button class="task-btn complete" @click="completeTask(task.id)">完成</button>
+            <button class="task-btn cancel" @click="cancelTask(task.id)">取消</button>
+          </div>
         </div>
-        <div v-if="store.activeTasks.length === 0" class="task-empty">
-          暂无进行中的任务
-        </div>
+        <div v-if="store.activeTasks.length === 0" class="empty-hint">暂无进行中的任务</div>
       </div>
     </div>
     
     <div class="task-section">
-      <h4>历史记录</h4>
+      <h3>历史记录</h3>
       <div class="task-list history">
-        <div 
-          v-for="task in store.recentTasks.slice(0, 5)" 
+        <div
+          v-for="task in store.recentTasks"
           :key="task.id"
-          class="task-item"
-          :class="task.status"
+          class="task-card done"
         >
-          <span class="task-dot" :style="{ background: task.grade_color }"></span>
-          <span class="task-text">
-            {{ task.cable_car_name }} ← {{ task.vehicle_name }}
-          </span>
-          <span class="task-status">{{ task.status === 'completed' ? '已完成' : '已取消' }}</span>
+          <span class="task-grade-dot" :style="{ background: task.grade_color || '#5a6380' }"></span>
+          <div class="task-info">
+            <div class="task-title">{{ task.cable_car_name }} ← {{ task.vehicle_name }}</div>
+            <div class="task-meta">{{ task.grade_name || '' }} · {{ task.status === 'completed' ? '已完成' : '已取消' }}</div>
+          </div>
         </div>
+        <div v-if="store.recentTasks.length === 0" class="empty-hint">暂无历史记录</div>
       </div>
     </div>
   </div>
@@ -41,8 +44,28 @@
 
 <script setup lang="ts">
 import { useDispatchStore } from '@/stores/dispatch'
+import * as api from '@/api/dispatch'
 
 const store = useDispatchStore()
+
+const completeTask = async (taskId: number) => {
+  try {
+    await api.completeTask(taskId)
+    await store.fetchData()
+  } catch (e) {
+    alert('操作失败')
+  }
+}
+
+const cancelTask = async (taskId: number) => {
+  if (!confirm('确认取消？')) return
+  try {
+    await api.cancelTask(taskId)
+    await store.fetchData()
+  } catch (e) {
+    alert('操作失败')
+  }
+}
 </script>
 
 <style scoped>
@@ -51,13 +74,12 @@ const store = useDispatchStore()
   border: 1px solid var(--border-color);
   border-radius: 14px;
   padding: 16px;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.task-section h4 {
+.task-section h3 {
   font-size: 12px;
   color: var(--text-muted);
   margin-bottom: 10px;
@@ -76,48 +98,89 @@ const store = useDispatchStore()
   max-height: 150px;
 }
 
-.task-item {
+.task-card {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 10px;
+  padding: 10px 12px;
   background: rgba(0, 0, 0, 0.2);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 12px;
 }
 
-.task-item.active {
-  border-left: 2px solid var(--accent-green);
+.task-card.active {
+  border-left: 3px solid var(--accent-green);
 }
 
-.task-item.completed {
-  border-left: 2px solid var(--accent-blue);
+.task-card.done {
+  border-left: 3px solid var(--accent-blue);
   opacity: 0.7;
 }
 
-.task-item.cancelled {
-  border-left: 2px solid var(--accent-red);
-  opacity: 0.5;
-}
-
-.task-dot {
-  width: 6px;
-  height: 6px;
+.task-grade-dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
-.task-text {
+.task-info {
   flex: 1;
-  color: var(--text-primary);
+  min-width: 0;
 }
 
-.task-status {
+.task-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-meta {
   font-size: 10px;
   color: var(--text-muted);
+  margin-top: 2px;
 }
 
-.task-empty {
+.task-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.task-btn {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.task-btn.complete {
+  background: rgba(0, 255, 136, 0.1);
+  color: var(--accent-green);
+  border: 1px solid rgba(0, 255, 136, 0.2);
+}
+
+.task-btn.complete:hover {
+  background: rgba(0, 255, 136, 0.2);
+}
+
+.task-btn.cancel {
+  background: rgba(255, 107, 107, 0.1);
+  color: var(--accent-red);
+  border: 1px solid rgba(255, 107, 107, 0.2);
+}
+
+.task-btn.cancel:hover {
+  background: rgba(255, 107, 107, 0.2);
+}
+
+.empty-hint {
   text-align: center;
   color: var(--text-muted);
   font-size: 12px;

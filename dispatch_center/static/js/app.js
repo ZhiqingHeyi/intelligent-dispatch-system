@@ -184,23 +184,23 @@ function updateCableCars() {
         let displayState, displayLabel, displayColor, stateClass;
         
         if (manualState && manualState !== 'normal' && STATE_CONFIG[manualState]) {
-            // 手动状态优先
+            // 手动状态优先（休息中/打杂中）
             displayState = manualState;
             displayLabel = STATE_CONFIG[manualState].label;
             displayColor = STATE_CONFIG[manualState].color;
             stateClass = manualState;
         } else if (autoState && STATE_CONFIG[autoState]) {
-            // 自动检测状态
+            // 自动检测状态（990平台接料/送料途中/基坑卸料/返程途中）
             displayState = autoState;
             displayLabel = STATE_CONFIG[autoState].label;
             displayColor = STATE_CONFIG[autoState].color;
             stateClass = autoState;
         } else {
-            // 默认：正常运行
-            displayState = 'normal';
-            displayLabel = STATE_CONFIG.normal.label;
-            displayColor = STATE_CONFIG.normal.color;
-            stateClass = 'normal';
+            // 兜底：返程途中
+            displayState = 'returning';
+            displayLabel = STATE_CONFIG.returning.label;
+            displayColor = STATE_CONFIG.returning.color;
+            stateClass = 'returning';
         }
         
         const isAssigned = car.status === 'assigned';

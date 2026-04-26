@@ -10,29 +10,7 @@
       
       <!-- 匹配区域 -->
       <div class="match-area">
-        <div v-if="!store.selectedCableCar" class="match-hint">
-          <div class="hint-icon">←</div>
-          <p>请先选择一台返程缆机</p>
-        </div>
-        
-        <template v-else>
-          <div class="match-selected">
-            <span>已选择: {{ selectedCar?.name }}</span>
-            <button @click="store.selectCableCar(null)">取消</button>
-          </div>
-          
-          <div v-if="!store.selectedVehicle" class="match-hint">
-            <div class="hint-icon">→</div>
-            <p>请选择一辆送料车辆</p>
-          </div>
-          
-          <div v-else class="match-action">
-            <span>已选择车辆: {{ selectedVehicle?.name }}</span>
-            <button @click="createMatch" :disabled="creating">
-              {{ creating ? '匹配中...' : '确认匹配' }}
-            </button>
-          </div>
-        </template>
+        <MatchCenter />
       </div>
       
       <!-- 任务列表 -->
@@ -42,47 +20,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
 import { useDispatchStore } from '@/stores/dispatch'
 import DataMonitor from './DataMonitor.vue'
 import TaskList from './TaskList.vue'
+import MatchCenter from './MatchCenter.vue'
 
 const store = useDispatchStore()
-const creating = ref(false)
-
-const selectedCar = computed(() => 
-  store.cableCars.find(c => c.id === store.selectedCableCar)
-)
-
-const selectedVehicle = computed(() => 
-  store.vehicles.find(v => v.id === store.selectedVehicle)
-)
-
-const createMatch = async () => {
-  if (!store.selectedCableCar || !store.selectedVehicle) return
-  
-  const car = selectedCar.value
-  const gradeId = car?.grade_id
-  
-  if (!gradeId) {
-    alert('请先为缆机设置级配')
-    return
-  }
-  
-  creating.value = true
-  const result = await store.createTask(
-    store.selectedCableCar,
-    store.selectedVehicle,
-    gradeId
-  )
-  creating.value = false
-  
-  if (result.success) {
-    alert('匹配成功')
-  } else {
-    alert('匹配失败')
-  }
-}
 </script>
 
 <style scoped>
@@ -119,11 +62,22 @@ const createMatch = async () => {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 14px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  position: relative;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.match-area::-webkit-scrollbar {
+  width: 4px;
+}
+
+.match-area::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 2px;
+}
+
+.match-area::-webkit-scrollbar-thumb {
+  background: rgba(0, 212, 255, 0.2);
+  border-radius: 2px;
 }
 
 .match-hint {
@@ -168,5 +122,129 @@ const createMatch = async () => {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+}
+
+.match-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.match-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  min-width: 280px;
+}
+
+.match-item.empty {
+  opacity: 0.5;
+  border-style: dashed;
+}
+
+.match-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.match-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.match-grade {
+  font-size: 11px;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.match-grade.no-grade {
+  background: rgba(255, 71, 87, 0.1);
+  color: var(--accent-red);
+  border: 1px solid rgba(255, 71, 87, 0.3);
+}
+
+.match-placeholder {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.match-arrow {
+  font-size: 24px;
+  color: var(--accent-blue);
+  opacity: 0.5;
+}
+
+.match-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-primary,
+.btn-secondary {
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-green));
+  color: #000;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 4px 16px rgba(0, 212, 255, 0.3);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.match-warning {
+  margin-top: 16px;
+  padding: 10px 16px;
+  background: rgba(255, 159, 67, 0.1);
+  border: 1px solid rgba(255, 159, 67, 0.3);
+  border-radius: 8px;
+  color: #ff9f43;
+  font-size: 13px;
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes fadeOutUp {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to { opacity: 0; transform: translateX(-50%) translateY(-20px); }
 }
 </style>

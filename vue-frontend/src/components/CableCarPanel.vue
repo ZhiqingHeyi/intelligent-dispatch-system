@@ -20,21 +20,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
 import { useDispatchStore } from '@/stores/dispatch'
 import CableCarCard from './CableCarCard.vue'
 import type { CableCar } from '@/types'
 
 const store = useDispatchStore()
-const gradeModalCar = ref<CableCar | null>(null)
-const stateModalCar = ref<CableCar | null>(null)
+
+const emit = defineEmits<{
+  'open-grade-modal': [data: { id: number; name: string; gradeId: number; type: 'cable_car' | 'vehicle' }]
+  'open-state-modal': [data: { id: number; name: string; currentState: string }]
+}>()
 
 const openGradeModal = (car: CableCar) => {
-  gradeModalCar.value = car
+  emit('open-grade-modal', {
+    id: car.id,
+    name: car.name,
+    gradeId: car.grade_id || 0,
+    type: 'cable_car'
+  })
 }
 
 const openStateModal = (car: CableCar) => {
-  stateModalCar.value = car
+  emit('open-state-modal', {
+    id: car.id,
+    name: car.name,
+    currentState: car.manual_state || 'normal'
+  })
 }
 </script>
 

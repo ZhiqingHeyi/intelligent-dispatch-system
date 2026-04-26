@@ -87,10 +87,17 @@ const groupedVehicles = computed(() => {
   return groups
 })
 
-const gradeModalVehicle = ref<Vehicle | null>(null)
+const emit = defineEmits<{
+  'open-grade-modal': [data: { id: number; name: string; gradeId: number; type: 'cable_car' | 'vehicle' }]
+}>()
 
 const openGradeModal = (vehicle: Vehicle) => {
-  gradeModalVehicle.value = vehicle
+  emit('open-grade-modal', {
+    id: vehicle.id,
+    name: vehicle.name,
+    gradeId: vehicle.grade_id || 0,
+    type: 'vehicle'
+  })
 }
 </script>
 

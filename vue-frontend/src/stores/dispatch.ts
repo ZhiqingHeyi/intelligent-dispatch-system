@@ -31,26 +31,31 @@ export const useDispatchStore = defineStore('dispatch', () => {
     recentTasks.value.filter(t => t.status === 'completed')
   )
 
-  // 获取缆机的显示状态
+  // 获取缆机的显示状态（只显示6种状态，"正常运行"不是显示状态）
   const getCableCarDisplayState = (car: CableCar) => {
     const manualState = car.manual_state as ManualState
     const autoState = car.state || car.direction as StateType
     
+    // 手动状态为 rest 或 other 时，优先显示
     if (manualState && manualState !== 'normal' && STATE_CONFIG[manualState]) {
       return {
         state: manualState,
         ...STATE_CONFIG[manualState]
       }
-    } else if (autoState && STATE_CONFIG[autoState]) {
+    }
+    
+    // 否则显示自动检测状态（loading/delivering/unloading/returning）
+    if (autoState && STATE_CONFIG[autoState]) {
       return {
         state: autoState,
         ...STATE_CONFIG[autoState]
       }
     }
     
+    // 默认显示返程途中（兜底）
     return {
-      state: 'normal' as StateType,
-      ...STATE_CONFIG.normal
+      state: 'returning' as StateType,
+      ...STATE_CONFIG.returning
     }
   }
 
@@ -113,6 +118,23 @@ export const useDispatchStore = defineStore('dispatch', () => {
     }
   }
 
+  // 设置车辆级配
+  const setVehicleGrade = async (vehicleId: number, gradeId: number) => {
+    const vehicleIndex = vehicles.value.findIndex(v => v.id === vehicleId)
+    if (vehicleIndex === -1) return { success: false }
+    
+    const originalGrade = vehicles.value[vehicleIndex].grade_id
+    vehicles.value[vehicleIndex].grade_id = gradeId
+    
+    try {
+      await api.setVehicleGrade(vehicleId, gradeId)
+      return { success: true }
+    } catch (e) {
+      vehicles.value[vehicleIndex].grade_id = originalGrade
+      return { success: false }
+    }
+  }
+
   // 创建任务
   const createTask = async (cableCarId: number, vehicleId: number, gradeId: number) => {
     try {
@@ -127,14 +149,26 @@ export const useDispatchStore = defineStore('dispatch', () => {
     }
   }
 
-  // 选择缆机
+  // 选择缆机（toggle）
   const selectCableCar = (id: number | null) => {
-    selectedCableCar.value = id
+    if (id !== null && selectedCableCar.value === id) {
+      selectedCableCar.value = null
+    } else {
+      selectedCableCar.value = id
+    }
+    selectedVehicle.value = null
   }
 
-  // 选择车辆
+  // 选择车辆（toggle，跳过已调度）
   const selectVehicle = (id: number | null) => {
-    selectedVehicle.value = id
+    const vehicle = vehicles.value.find(v => v.id === id)
+    if (vehicle && vehicle.status === 'assigned') return
+    
+    if (id !== null && selectedVehicle.value === id) {
+      selectedVehicle.value = null
+    } else {
+      selectedVehicle.value = id
+    }
   }
 
   return {
@@ -157,6 +191,7 @@ export const useDispatchStore = defineStore('dispatch', () => {
     fetchData,
     setCableCarState,
     setCableCarGrade,
+    setVehicleGrade,
     createTask,
     selectCableCar,
     selectVehicle,
