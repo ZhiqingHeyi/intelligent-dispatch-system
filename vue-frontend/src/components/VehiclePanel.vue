@@ -106,6 +106,8 @@ const openGradeModal = (vehicle: Vehicle) => {
   flex-direction: column;
   gap: 14px;
   min-width: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .panel-header {

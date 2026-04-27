@@ -3,8 +3,8 @@
     class="vehicle-card"
     :class="{ 
       selected: isSelected,
-      going: vehicle.direction === 'going',
-      returning: vehicle.direction === 'returning',
+      delivering: vehicle.state === 'delivering' || vehicle.state === 'delivering_pause',
+      returning: vehicle.state === 'returning',
       assigned: vehicle.status === 'assigned'
     }"
     @click="handleClick"
@@ -44,19 +44,28 @@ import { computed } from 'vue'
 import { useDispatchStore } from '@/stores/dispatch'
 import type { Vehicle } from '@/types'
 
-const DIRECTION_LABELS: Record<string, string> = {
-  returning: '返程',
-  going: '送料',
-  stopped: '停止',
-  idle: '待命',
-  assigned: '已调度'
+// 方案A：新的状态显示（基于位置+方向+速度）
+const STATE_LABELS: Record<string, string> = {
+  standby: '待命',           // 接料区/停车区
+  delivering: '送料中',      // 送料途中移动
+  delivering_pause: '送料暂停', // 送料途中停止
+  unloading: '卸料中',       // 卸料区移动
+  unloading_wait: '卸料等待', // 卸料区等待
+  returning: '返程中',       // 返程
+  // 兼容旧状态
+  loading: '接料中',
+  stopped: '停止'
 }
 
 const STATE_COLORS: Record<string, { bg: string; color: string; border: string }> = {
+  standby: { bg: 'rgba(255,217,61,0.12)', color: '#ffd93d', border: 'rgba(255,217,61,0.3)' },          // 黄色 - 待命
+  delivering: { bg: 'rgba(0,212,255,0.12)', color: '#00d4ff', border: 'rgba(0,212,255,0.3)' },       // 蓝色 - 送料中
+  delivering_pause: { bg: 'rgba(90,140,255,0.12)', color: '#5a8cff', border: 'rgba(90,140,255,0.3)' }, // 浅蓝 - 送料暂停
+  unloading: { bg: 'rgba(255,107,107,0.12)', color: '#ff6b6b', border: 'rgba(255,107,107,0.3)' },    // 红色 - 卸料中
+  unloading_wait: { bg: 'rgba(255,159,159,0.12)', color: '#ff9f9f', border: 'rgba(255,159,159,0.3)' }, // 粉红 - 卸料等待
+  returning: { bg: 'var(--accent-green-bg)', color: 'var(--accent-green)', border: 'var(--accent-green-border)' }, // 绿色 - 返程
+  // 兼容旧状态
   loading: { bg: 'rgba(255,217,61,0.12)', color: '#ffd93d', border: 'rgba(255,217,61,0.3)' },
-  delivering: { bg: 'rgba(0,212,255,0.12)', color: '#00d4ff', border: 'rgba(0,212,255,0.3)' },
-  unloading: { bg: 'rgba(255,107,107,0.12)', color: '#ff6b6b', border: 'rgba(255,107,107,0.3)' },
-  returning: { bg: 'var(--accent-green-bg)', color: 'var(--accent-green)', border: 'var(--accent-green-border)' },
   stopped: { bg: 'var(--bg-subtle)', color: 'var(--text-muted)', border: 'var(--border-subtle)' }
 }
 
@@ -76,21 +85,22 @@ const grade = computed(() => store.grades.find(g => g.id === props.vehicle.grade
 
 const statusLabel = computed(() => {
   if (props.vehicle.status === 'assigned') return '已调度'
-  if (props.vehicle.state_label && props.vehicle.state !== 'stopped') return props.vehicle.state_label
-  return DIRECTION_LABELS[props.vehicle.direction] || '待命'
+  // 优先使用后端返回的 state_label
+  if (props.vehicle.state_label) return props.vehicle.state_label
+  // 其次使用 state 映射
+  if (props.vehicle.state && STATE_LABELS[props.vehicle.state]) {
+    return STATE_LABELS[props.vehicle.state]
+  }
+  return '待命'
 })
 
 const statusClass = computed(() => {
-  const d = props.vehicle.direction
   const s = props.vehicle.status
   const st = props.vehicle.state
   if (s === 'assigned') return 'assigned'
-  if (st === 'loading') return 'loading'
-  if (st === 'delivering') return 'going'
-  if (st === 'unloading') return 'unloading'
-  if (st === 'returning' || d === 'returning') return 'returning'
-  if (d === 'going') return 'going'
-  return 'stopped'
+  // 基于新的 state 值返回 class
+  if (st) return st
+  return 'standby'
 })
 
 const statusStyle = computed(() => {
@@ -106,16 +116,11 @@ const statusStyle = computed(() => {
     const s = STATE_COLORS[st]
     return { background: s.bg, color: s.color, border: `1px solid ${s.border}` }
   }
-  const styles: Record<string, { bg: string; color: string; border: string }> = {
-    going: { bg: 'var(--accent-blue-bg)', color: 'var(--accent-blue)', border: 'var(--accent-blue-border)' },
-    returning: { bg: 'var(--accent-green-bg)', color: 'var(--accent-green)', border: 'var(--accent-green-border)' },
-    stopped: { bg: 'var(--bg-subtle)', color: 'var(--text-muted)', border: 'var(--border-subtle)' }
-  }
-  const s = styles[statusClass.value] || styles.stopped
+  // 默认样式
   return {
-    background: s.bg,
-    color: s.color,
-    border: `1px solid ${s.border}`
+    background: 'var(--bg-subtle)',
+    color: 'var(--text-muted)',
+    border: '1px solid var(--border-subtle)'
   }
 })
 
@@ -155,17 +160,36 @@ const handleClick = () => {
   box-shadow: 0 0 20px var(--accent-blue-bg);
 }
 
-.vehicle-card.going {
+/* 方案A：新的状态样式 */
+.vehicle-card.standby {
+  border-color: rgba(255,217,61,0.4);
+}
+
+.vehicle-card.delivering {
   border-color: var(--accent-blue-border-hover);
-  animation: going-pulse 2s ease-in-out infinite;
+  animation: delivering-pulse 2s ease-in-out infinite;
+}
+
+.vehicle-card.delivering_pause {
+  border-color: rgba(90,140,255,0.4);
+}
+
+.vehicle-card.unloading {
+  border-color: rgba(255,107,107,0.4);
+}
+
+.vehicle-card.unloading_wait {
+  border-color: rgba(255,159,159,0.4);
 }
 
 .vehicle-card.returning {
   border-color: var(--accent-green-border);
 }
 
-.vehicle-card.unloading {
-  border-color: rgba(255,107,107,0.4);
+/* 送料中状态样式 */
+.vehicle-card.delivering {
+  border-color: var(--accent-blue-border-hover);
+  animation: delivering-pulse 2s ease-in-out infinite;
 }
 
 .vehicle-card.assigned {
@@ -174,7 +198,7 @@ const handleClick = () => {
   cursor: not-allowed;
 }
 
-@keyframes going-pulse {
+@keyframes delivering-pulse {
   0%, 100% { box-shadow: 0 0 0 0 var(--accent-blue-bg); }
   50% { box-shadow: 0 0 12px 2px var(--accent-blue-bg); }
 }

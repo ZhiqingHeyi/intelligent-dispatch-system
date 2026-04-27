@@ -132,6 +132,9 @@ onUnmounted(() => {
   --bg-header-end: rgba(4, 8, 16, 0.95);
   --bg-input: rgba(0, 0, 0, 0.3);
   --bg-overlay: rgba(0, 0, 0, 0.7);
+  --header-text-primary: #e8efff;
+  --header-text-secondary: #8b92b4;
+  --header-text-muted: #5a6380;
   --border-color: rgba(30, 58, 110, 0.4);
   --border-subtle: rgba(30, 58, 110, 0.2);
   --text-primary: #e8efff;
@@ -208,89 +211,97 @@ onUnmounted(() => {
 }
 
 [data-theme="light"] {
-  --bg-primary: #daeaf8;
-  --bg-card: rgba(210, 230, 252, 0.75);
-  --bg-card-hover: rgba(200, 225, 252, 0.88);
-  --bg-subtle: rgba(40, 100, 160, 0.06);
-  --bg-subtle-hover: rgba(40, 100, 160, 0.1);
-  --bg-inset: rgba(30, 80, 140, 0.06);
-  --bg-header: rgba(200, 225, 248, 0.98);
-  --bg-header-end: rgba(190, 218, 248, 0.95);
-  --bg-input: rgba(30, 80, 140, 0.06);
-  --bg-overlay: rgba(10, 40, 80, 0.4);
-  --border-color: rgba(120, 170, 220, 0.45);
-  --border-subtle: rgba(120, 170, 220, 0.25);
-  --text-primary: #0f2b44;
-  --text-secondary: #3a6080;
-  --text-muted: #7ea0be;
-  --accent-blue: #0080d0;
-  --accent-green: #00a854;
-  --accent-yellow: #c49000;
-  --accent-red: #e04040;
-  --accent-purple: #7c3aed;
-  --accent-blue-bg: rgba(0, 128, 208, 0.1);
-  --accent-blue-bg-hover: rgba(0, 128, 208, 0.16);
-  --accent-blue-border: rgba(0, 128, 208, 0.18);
-  --accent-blue-border-hover: rgba(0, 128, 208, 0.3);
-  --accent-blue-border-strong: rgba(0, 128, 208, 0.45);
-  --accent-blue-glow: rgba(0, 128, 208, 0.06);
-  --accent-green-bg: rgba(0, 168, 84, 0.1);
-  --accent-green-border: rgba(0, 168, 84, 0.22);
-  --accent-red-bg: rgba(224, 64, 64, 0.1);
-  --accent-red-border: rgba(224, 64, 64, 0.22);
-  --accent-yellow-bg: rgba(196, 144, 0, 0.1);
-  --accent-yellow-border: rgba(196, 144, 0, 0.28);
-  --accent-purple-bg: rgba(124, 58, 237, 0.1);
-  --accent-purple-border: rgba(124, 58, 237, 0.22);
-  --shadow-color: rgba(0, 50, 100, 0.1);
-  --shadow-heavy: rgba(0, 50, 100, 0.15);
-  --scrollbar-track: rgba(0, 50, 100, 0.06);
-  --scrollbar-thumb: rgba(0, 128, 208, 0.18);
-  --scrollbar-thumb-hover: rgba(0, 128, 208, 0.35);
-  --title-gradient: linear-gradient(135deg, #0f2b44 0%, var(--accent-blue) 30%, var(--accent-green) 70%, #0f2b44 100%);
-  --btn-gradient: linear-gradient(135deg, var(--accent-blue), var(--accent-green));
-  --btn-gradient-text: #fff;
-  --fab-bg: linear-gradient(135deg, rgba(0, 128, 208, 0.12), rgba(0, 168, 84, 0.08));
-  --fab-border: rgba(0, 128, 208, 0.28);
-  --fab-active-bg: rgba(224, 64, 64, 0.12);
-  --fab-active-border: rgba(224, 64, 64, 0.28);
-  --deco-gradient: radial-gradient(ellipse at 20% 20%, rgba(0, 120, 220, 0.05) 0%, transparent 50%), radial-gradient(ellipse at 80% 80%, rgba(0, 180, 120, 0.04) 0%, transparent 50%);
-  --loading-bg: linear-gradient(135deg, #daeaf8 0%, #c4ddf2 50%, #daeaf8 100%);
-  --close-btn-bg: rgba(0, 50, 100, 0.06);
-  --close-btn-hover-bg: rgba(224, 64, 64, 0.1);
-  --badge-bg: linear-gradient(90deg, rgba(0, 128, 208, 0.08) 0%, rgba(0, 128, 208, 0.14) 50%, rgba(0, 128, 208, 0.08) 100%);
-  --badge-border: rgba(0, 128, 208, 0.22);
-  --grade-no-bg: rgba(60, 100, 140, 0.1);
-  --state-btn-bg: rgba(60, 100, 140, 0.1);
-  --state-btn-border: rgba(60, 100, 140, 0.22);
-  --state-btn-color: #5a8aaa;
-  --grade-separator: rgba(120, 170, 220, 0.3);
-  --id-badge-bg: linear-gradient(135deg, rgba(0, 128, 208, 0.14), rgba(0, 168, 84, 0.08));
-  --id-badge-border: rgba(0, 128, 208, 0.22);
-  --scan-line-color: var(--accent-blue);
-  --glow-border: linear-gradient(135deg, rgba(0, 128, 208, 0.08), transparent, rgba(0, 168, 84, 0.08));
-  --modal-bg: rgba(215, 232, 252, 0.96);
-  --modal-shadow: 0 24px 48px rgba(0, 50, 100, 0.18);
-  --ai-panel-gradient: radial-gradient(circle at 50% 0%, rgba(0, 128, 208, 0.05) 0%, transparent 50%), radial-gradient(circle at 50% 100%, rgba(0, 168, 84, 0.03) 0%, transparent 50%);
-  --ai-scheduler-bg: rgba(0, 50, 100, 0.04);
-  --ai-msg-user-bg: rgba(0, 128, 208, 0.1);
-  --ai-msg-user-border: rgba(0, 128, 208, 0.15);
-  --ai-msg-assistant-bg: rgba(0, 50, 100, 0.05);
-  --ai-msg-avatar-bg: rgba(0, 50, 100, 0.06);
-  --ai-msg-avatar-gradient: linear-gradient(135deg, rgba(0, 128, 208, 0.12), rgba(0, 168, 84, 0.08));
-  --ai-msg-avatar-border: rgba(0, 128, 208, 0.18);
-  --ai-code-bg: rgba(0, 128, 208, 0.1);
-  --config-modal-bg: linear-gradient(180deg, rgba(215, 232, 252, 0.98) 0%, rgba(200, 225, 250, 0.98) 100%);
-  --monitor-radial: radial-gradient(circle at 20% 50%, rgba(0, 168, 84, 0.04) 0%, transparent 40%), radial-gradient(circle at 80% 50%, rgba(0, 128, 208, 0.04) 0%, transparent 40%);
-  --match-card-bg: rgba(0, 50, 100, 0.04);
-  --match-card-hover-bg: rgba(0, 50, 100, 0.08);
-  --title-glow-bg: radial-gradient(ellipse at center, rgba(0, 128, 208, 0.1) 0%, rgba(0, 168, 84, 0.05) 30%, transparent 70%);
-  --underline-glow-bg: linear-gradient(90deg, transparent, rgba(0, 128, 208, 0.2), rgba(0, 168, 84, 0.2), rgba(0, 128, 208, 0.2), transparent);
-  --header-top-line: linear-gradient(90deg, transparent 0%, var(--accent-blue) 20%, var(--accent-green) 50%, var(--accent-blue) 80%, transparent 100%);
-  --section-title-border: rgba(0, 128, 208, 0.12);
-  --toggle-bg: rgba(0, 50, 100, 0.08);
-  --toggle-active-bg: rgba(0, 128, 208, 0.15);
-  --toggle-active-border: rgba(0, 128, 208, 0.35);
+  /* 军用雷达/CRT荧光绿色主题 */
+  --bg-primary: #0a110a;
+  --bg-card: rgba(10, 20, 10, 0.85);
+  --bg-card-hover: rgba(15, 30, 15, 0.9);
+  --bg-subtle: rgba(0, 40, 0, 0.3);
+  --bg-subtle-hover: rgba(0, 60, 0, 0.4);
+  --bg-inset: rgba(0, 30, 0, 0.4);
+  --bg-header: #051005;
+  --bg-header-end: #0a1a0a;
+  --bg-input: rgba(0, 40, 0, 0.5);
+  --header-text-primary: #39ff14;
+  --header-text-secondary: #7fff00;
+  --header-text-muted: #4a8a4a;
+  --bg-overlay: rgba(0, 10, 0, 0.8);
+  --border-color: rgba(57, 255, 20, 0.3);
+  --border-subtle: rgba(57, 255, 20, 0.15);
+  --text-primary: #39ff14;
+  --text-secondary: #7fff00;
+  --text-muted: #4a8a4a;
+  --accent-blue: #39ff14;
+  --accent-green: #00ff41;
+  --accent-yellow: #adff2f;
+  --accent-red: #ff3333;
+  --accent-purple: #bf00ff;
+  --accent-blue-bg: rgba(57, 255, 20, 0.15);
+  --accent-blue-bg-hover: rgba(57, 255, 20, 0.25);
+  --accent-blue-border: rgba(57, 255, 20, 0.4);
+  --accent-blue-border-hover: rgba(57, 255, 20, 0.6);
+  --accent-blue-border-strong: rgba(57, 255, 20, 0.8);
+  --accent-blue-glow: rgba(57, 255, 20, 0.3);
+  --accent-green-bg: rgba(0, 255, 65, 0.15);
+  --accent-green-border: rgba(0, 255, 65, 0.4);
+  --accent-red-bg: rgba(255, 51, 51, 0.15);
+  --accent-red-border: rgba(255, 51, 51, 0.4);
+  --accent-yellow-bg: rgba(173, 255, 47, 0.15);
+  --accent-yellow-border: rgba(173, 255, 47, 0.4);
+  --accent-purple-bg: rgba(191, 0, 255, 0.15);
+  --accent-purple-border: rgba(191, 0, 255, 0.4);
+  --shadow-color: rgba(57, 255, 20, 0.2);
+  --shadow-heavy: rgba(57, 255, 20, 0.3);
+  --scrollbar-track: rgba(0, 40, 0, 0.3);
+  --scrollbar-thumb: rgba(57, 255, 20, 0.4);
+  --scrollbar-thumb-hover: rgba(57, 255, 20, 0.6);
+  --title-gradient: linear-gradient(135deg, #39ff14 0%, #7fff00 50%, #00ff41 100%);
+  --btn-gradient: linear-gradient(135deg, #39ff14, #00ff41);
+  --btn-gradient-text: #000000;
+  --fab-bg: linear-gradient(135deg, rgba(57, 255, 20, 0.2), rgba(0, 255, 65, 0.15));
+  --fab-border: rgba(57, 255, 20, 0.5);
+  --fab-active-bg: rgba(255, 51, 51, 0.2);
+  --fab-active-border: rgba(255, 51, 51, 0.5);
+  --deco-gradient: 
+    repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(57, 255, 20, 0.03) 2px, rgba(57, 255, 20, 0.03) 4px),
+    radial-gradient(ellipse at 50% 50%, rgba(57, 255, 20, 0.05) 0%, transparent 70%);
+  --loading-bg: #0a110a;
+  --close-btn-bg: rgba(57, 255, 20, 0.1);
+  --close-btn-hover-bg: rgba(255, 51, 51, 0.2);
+  --badge-bg: linear-gradient(90deg, rgba(57, 255, 20, 0.1) 0%, rgba(57, 255, 20, 0.25) 50%, rgba(57, 255, 20, 0.1) 100%);
+  --badge-border: rgba(57, 255, 20, 0.5);
+  --grade-no-bg: rgba(0, 40, 0, 0.4);
+  --state-btn-bg: rgba(0, 40, 0, 0.4);
+  --state-btn-border: rgba(57, 255, 20, 0.3);
+  --state-btn-color: #4a8a4a;
+  --grade-separator: rgba(57, 255, 20, 0.2);
+  --id-badge-bg: linear-gradient(135deg, #39ff14, #00ff41);
+  --id-badge-border: rgba(57, 255, 20, 0.5);
+  --scan-line-color: #39ff14;
+  --glow-border: linear-gradient(135deg, rgba(57, 255, 20, 0.3), transparent, rgba(0, 255, 65, 0.2));
+  --modal-bg: rgba(10, 20, 10, 0.95);
+  --modal-shadow: 0 0 40px rgba(57, 255, 20, 0.3);
+  --ai-panel-gradient: 
+    repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(57, 255, 20, 0.02) 2px, rgba(57, 255, 20, 0.02) 4px),
+    radial-gradient(circle at 50% 0%, rgba(57, 255, 20, 0.08) 0%, transparent 50%);
+  --ai-scheduler-bg: rgba(0, 30, 0, 0.4);
+  --ai-msg-user-bg: rgba(57, 255, 20, 0.1);
+  --ai-msg-user-border: rgba(57, 255, 20, 0.2);
+  --ai-msg-assistant-bg: rgba(0, 30, 0, 0.3);
+  --ai-msg-avatar-bg: rgba(0, 40, 0, 0.5);
+  --ai-msg-avatar-gradient: linear-gradient(135deg, #39ff14, #00ff41);
+  --ai-msg-avatar-border: rgba(57, 255, 20, 0.3);
+  --ai-code-bg: rgba(57, 255, 20, 0.1);
+  --config-modal-bg: rgba(10, 20, 10, 0.98);
+  --monitor-radial: radial-gradient(circle at 20% 50%, rgba(0, 255, 65, 0.08) 0%, transparent 40%), radial-gradient(circle at 80% 50%, rgba(57, 255, 20, 0.08) 0%, transparent 40%);
+  --match-card-bg: rgba(0, 30, 0, 0.4);
+  --match-card-hover-bg: rgba(0, 40, 0, 0.5);
+  --title-glow-bg: radial-gradient(ellipse at center, rgba(57, 255, 20, 0.3) 0%, transparent 70%);
+  --underline-glow-bg: linear-gradient(90deg, transparent, #39ff14, #00ff41, #39ff14, transparent);
+  --header-top-line: linear-gradient(90deg, transparent 0%, #39ff14 20%, #00ff41 50%, #39ff14 80%, transparent 100%);
+  --section-title-border: rgba(57, 255, 20, 0.2);
+  --toggle-bg: rgba(0, 40, 0, 0.5);
+  --toggle-active-bg: rgba(57, 255, 20, 0.2);
+  --toggle-active-border: #39ff14;
 }
 
 * {
@@ -314,6 +325,57 @@ body {
   flex-direction: column;
   background: var(--deco-gradient), var(--bg-primary);
   transition: background 0.3s ease;
+  position: relative;
+}
+
+/* 军用雷达CRT扫描线效果 - 仅在雷达主题(light)下显示 */
+.dashboard[data-theme="light"]::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: 
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 1px,
+      rgba(57, 255, 20, 0.03) 1px,
+      rgba(57, 255, 20, 0.03) 2px
+    );
+  animation: crt-flicker 0.15s infinite;
+}
+
+@keyframes crt-flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.98; }
+}
+
+/* 雷达扫描动画 */
+.dashboard[data-theme="light"]::before {
+  content: '';
+  position: fixed;
+  top: -100%;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(57, 255, 20, 0.1) 50%,
+    transparent
+  );
+  pointer-events: none;
+  z-index: 9998;
+  animation: radar-scan 4s linear infinite;
+}
+
+@keyframes radar-scan {
+  0% { top: -10%; }
+  100% { top: 110%; }
 }
 
 .main-content {

@@ -12,6 +12,7 @@ export const useDispatchStore = defineStore('dispatch', () => {
   const recentTasks = ref<Task[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const lastSyncTime = ref<number>(Date.now())
   
   const selectedCableCar = ref<number | null>(null)
   const selectedVehicle = ref<number | null>(null)
@@ -74,7 +75,6 @@ export const useDispatchStore = defineStore('dispatch', () => {
 
   const fetchData = async () => {
     loading.value = true
-    error.value = null
     
     try {
       const { data } = await api.fetchStatus()
@@ -83,6 +83,8 @@ export const useDispatchStore = defineStore('dispatch', () => {
       grades.value = data.grades
       activeTasks.value = data.active_tasks
       recentTasks.value = data.recent_tasks
+      error.value = null
+      lastSyncTime.value = Date.now()
     } catch (e) {
       error.value = '数据同步失败'
       console.error('Fetch data error:', e)
@@ -364,6 +366,7 @@ export const useDispatchStore = defineStore('dispatch', () => {
     recentTasks,
     loading,
     error,
+    lastSyncTime,
     selectedCableCar,
     selectedVehicle,
     aiConfig,

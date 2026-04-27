@@ -36,9 +36,9 @@
     
     <div class="header-deco-right">
       <div class="header-top-status">
-        <span class="sync-status" :class="{ online: !store.loading, offline: store.error }">
+        <span class="sync-status" :class="{ online: syncStatus.online, offline: !syncStatus.online }">
           <span class="sync-dot"></span>
-          {{ store.error ? '同步异常' : '智能匹配中' }}
+          {{ syncStatus.text }}
         </span>
         <span v-if="store.aiApiConfigured" class="ai-status-badge" :class="{ running: store.aiSchedulerStatus?.running }" @click="store.toggleAiPanel()">
           <span class="ai-badge-dot"></span>
@@ -60,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useDispatchStore } from '@/stores/dispatch'
 import { useThemeStore } from '@/stores/theme'
 
@@ -68,6 +68,17 @@ const store = useDispatchStore()
 const themeStore = useThemeStore()
 const currentTime = ref('')
 let timer: number | null = null
+
+// 计算同步状态：基于最后一次成功同步时间，而不是 loading 状态
+const syncStatus = computed(() => {
+  const timeSinceLastSync = Date.now() - store.lastSyncTime
+  const isRecent = timeSinceLastSync < 10000 // 10秒内认为是在线
+  
+  if (store.error || !isRecent) {
+    return { online: false, text: '同步异常' }
+  }
+  return { online: true, text: '智能匹配中' }
+})
 
 const updateClock = () => {
   const now = new Date()
@@ -329,8 +340,8 @@ onUnmounted(() => {
   font-family: 'Orbitron', monospace;
   font-size: clamp(7px, 0.7vw, 9px);
   letter-spacing: clamp(3px, 0.5vw, 6px);
-  color: var(--text-muted);
-  opacity: 0.7;
+  color: var(--header-text-muted);
+  opacity: 0.8;
 }
 
 @media screen and (max-width: 1200px) {
@@ -427,7 +438,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--text-muted);
+  color: var(--header-text-muted);
 }
 
 .sync-status.online {
@@ -455,7 +466,7 @@ onUnmounted(() => {
 .clock {
   font-family: 'Orbitron', monospace;
   font-size: clamp(10px, 1vw, 12px);
-  color: var(--text-secondary);
+  color: var(--header-text-secondary);
   letter-spacing: clamp(1px, 0.2vw, 2px);
 }
 

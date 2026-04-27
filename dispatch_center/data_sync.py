@@ -36,7 +36,8 @@ from database import get_db
 from state_detector import (
     detect_cable_car_state, detect_vehicle_state,
     LOADING_ZONE, UNLOADING_ZONE,
-    VEHICLE_LOADING_ZONE, VEHICLE_UNLOADING_ZONE, VEHICLE_Y_DELTA_THRESHOLD
+    VEHICLE_LOADING_ZONE, VEHICLE_UNLOADING_ZONE, VEHICLE_DELIVERING_ZONE,
+    VEHICLE_Y_DELTA_THRESHOLD
 )
 
 VEHICLE_Y_HISTORY_SIZE = 5
@@ -84,9 +85,16 @@ def detect_vehicle_direction(tid, result_y, speed):
     history.append(result_y)
 
     if speed is None or float(speed) < 0.1:
+        # 车辆几乎停止，返回stopped而不是保留旧方向
+        # 避免车辆停止后仍显示之前的方向导致状态错误
         prev_dir = _vehicle_prev_direction.get(tid, 'idle')
         if prev_dir in ('going', 'returning'):
-            return prev_dir
+            # 车辆之前移动但现在停止，清除历史方向
+            _vehicle_prev_direction[tid] = 'idle'
+            # 同时清除确认计数
+            for key in list(_vehicle_direction_confirm.keys()):
+                if key.startswith(f"{tid}_"):
+                    del _vehicle_direction_confirm[key]
         return 'stopped'
 
     if len(history) < 2:
@@ -354,7 +362,7 @@ def sync_vehicles():
             direction = detect_vehicle_direction(tid, result_y, speed)
 
             y_trend = _compute_vehicle_y_trend(tid)
-            v_state, v_state_label, v_location = detect_vehicle_state(result_y, speed, y_trend)
+            v_state, v_state_label, v_location = detect_vehicle_state(result_y, speed, y_trend, direction)
 
             if prev_direction in ('going', 'idle') and direction == 'returning':
                 print(f"[VEHICLE-STATE] {tid}号车方向切换: {prev_direction} → returning")
@@ -388,9 +396,10 @@ def sync_vehicles():
                          updated_at, now, tid))
 
                     if direction == 'going' and grade_id > 0:
-                        at_platform = v_state in ('unloading',) or (
-                            v_state == 'loading' and speed < 0.5
-                        )
+                        # 基于实测数据校准的优先级判断
+                        # - 在卸料区(Y < -950)：at_platform（已在平台等待卸料）
+                        # - 在送料途中(-950 < Y < 50)：on_the_way
+                        at_platform = result_y <= VEHICLE_UNLOADING_ZONE[1]  # Y <= -950
                         _vehicle_queue_enter(vehicle_id, tid, grade_id, now, at_platform=at_platform)
                     elif direction == 'returning':
                         _vehicle_queue_exit(vehicle_id, '已返程')
@@ -496,7 +505,7 @@ def _cleanup_queues(db):
         print(f"[QUEUE-CLEANUP] 车辆队列清理: {before} → {len(_vehicle_queue)}")
 
     for item in _vehicle_queue:
-        v = db.execute('SELECT grade_id, status, direction, state FROM vehicles WHERE id = ?',
+        v = db.execute('SELECT grade_id, status, direction, state, result_y FROM vehicles WHERE id = ?',
                        (item['vehicle_id'],)).fetchone()
         if v:
             item['grade_id'] = v['grade_id']
@@ -509,10 +518,10 @@ def _cleanup_queues(db):
             elif v['grade_id'] == 0:
                 _vehicle_queue = [q for q in _vehicle_queue if q['vehicle_id'] != item['vehicle_id']]
                 print(f"[QUEUE-CLEANUP] 车辆{item['tid']}级配清零，移出队列")
-            elif v['state'] in ('unloading',) or (v['state'] == 'loading' and v['direction'] == 'going'):
+            elif v['result_y'] <= VEHICLE_UNLOADING_ZONE[1]:  # Y <= -950，到达卸料区
                 if item['priority'] != PRIORITY_AT_PLATFORM:
                     item['priority'] = PRIORITY_AT_PLATFORM
-                    print(f"[QUEUE-VEHICLE-UPGRADE] {item['tid']}号车到达平台，优先级升级")
+                    print(f"[QUEUE-VEHICLE-UPGRADE] {item['tid']}号车到达卸料区(Y={v['result_y']:.0f})，优先级升级")
 
 
 def auto_match():

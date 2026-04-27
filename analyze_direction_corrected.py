@@ -71,12 +71,12 @@ def main():
         
         total_speed = (xs**2 + ys**2)**0.5
         
-        # 判断位置
-        if 70 <= lat <= 140:
+        # 判断位置（优化：装料区下限从70调整到40，覆盖990平台休息区）
+        if 40 <= lat <= 150:
             location = "装料平台区"
-        elif lat >= 300:
+        elif lat >= 280:
             location = "卸料平台区"
-        elif lat > 140 and lat < 300:
+        elif lat > 150 and lat < 280:
             location = "中途区域"
         else:
             location = "未知区域"
@@ -167,8 +167,8 @@ SELECT
         ELSE '平台区/调整中'
     END as direction,
     CASE
-        WHEN latitude BETWEEN 70 AND 140 THEN '装料平台区'
-        WHEN latitude >= 300 THEN '卸料平台区'
+        WHEN latitude BETWEEN 40 AND 150 THEN '装料平台区'
+        WHEN latitude >= 280 THEN '卸料平台区'
         ELSE '中途'
     END as location
 FROM cable_car_status;
