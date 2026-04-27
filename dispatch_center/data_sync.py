@@ -1,22 +1,29 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-数据同步模块 - 包含基于状态切换的智能匹配逻辑
+数据同步模块 - 基于双队列的智能匹配逻辑
 
-匹配触发逻辑：
-1. 缆机从 "返程途中(returning)" → "990平台接料(loading)" 触发匹配
-2. 在接料期间持续寻找同级别送料车辆
-3. 缆机从 "990平台接料(loading)" → "送料途中(delivering)" 结束匹配
+=== 匹配队列机制 ===
 
-任务完成逻辑（OR逻辑，任一触发即完成）：
-触发源1: 缆机 loading → delivering（缆机开始送料，说明车已到装好料了）
-触发源2: 车辆 going → returning（车辆开始返程，说明已送完料了）
-兜底机制: auto_complete() 定期检查当前状态，防止状态切换事件丢失
+缆机等待队列（cable_car_queue）：
+- 入队：缆机 returning → loading（到达装料区等待接料）
+- 出队：匹配成功 / loading → delivering（已接完料出发）/ 状态异常
 
-状态流转：
-返程途中 → 990平台接料 → 送料途中
-    ↓           ↓              ↓
-(卸完料)   (触发匹配)      (结束匹配+完成任务)
+车辆等待队列（vehicle_queue）：
+- 入队：车辆 direction='going' 且 grade_id>0 且未分配
+- 优先级升级：车辆到达平台等待时升级为 at_platform
+- 出队：匹配成功 / direction='returning'（已卸完料返程）/ grade_id=0 / 被分配
+
+=== 匹配算法（FIFO + 优先级）===
+1. 缆机队列按入队时间排序（先到先服务）
+2. 对每台缆机，在车辆队列中找级配匹配的车辆
+3. 车辆按 优先级(at_platform优先) → 入队时间(FIFO) 排序
+4. 匹配第一个，双方出队
+
+=== 任务完成逻辑（OR逻辑）===
+触发源1: 缆机 loading → delivering（缆机开始送料）
+触发源2: 车辆 going → returning（车辆开始返程）
+兜底机制: auto_complete() 定期检查当前状态
 """
 
 import pymysql
@@ -35,13 +42,17 @@ from state_detector import (
 VEHICLE_Y_HISTORY_SIZE = 5
 VEHICLE_DIRECTION_CONFIRM_FRAMES = 2
 
+PRIORITY_AT_PLATFORM = 0
+PRIORITY_ON_THE_WAY = 1
+
 _vehicle_y_history = {}
 _vehicle_prev_direction = {}
 _vehicle_direction_confirm = {}
 
 _cable_car_prev_state = {}
 
-_matching_cable_cars = {}
+_cable_car_queue = []
+_vehicle_queue = []
 
 
 def _get_cable_car_conn():
@@ -117,7 +128,6 @@ def detect_vehicle_direction(tid, result_y, speed):
 
 
 def _compute_vehicle_y_trend(tid):
-    """计算车辆Y坐标的滑动窗口趋势"""
     history = _vehicle_y_history.get(tid)
     if not history or len(history) < 2:
         return 0
@@ -128,11 +138,66 @@ def _compute_vehicle_y_trend(tid):
     return trend
 
 
+def _cable_car_queue_enter(car_id, grade_id, now):
+    global _cable_car_queue
+    for item in _cable_car_queue:
+        if item['car_id'] == car_id:
+            if item['grade_id'] != grade_id:
+                item['grade_id'] = grade_id
+                print(f"[QUEUE-CABLE-UPDATE] {car_id}号缆机级配更新为{grade_id}")
+            return
+    _cable_car_queue.append({
+        'car_id': car_id,
+        'grade_id': grade_id,
+        'enter_time': now
+    })
+    print(f"[QUEUE-CABLE-IN] {car_id}号缆机入队(级配={grade_id}), 队列长度={len(_cable_car_queue)}")
+
+
+def _cable_car_queue_exit(car_id, reason=''):
+    global _cable_car_queue
+    before = len(_cable_car_queue)
+    _cable_car_queue = [item for item in _cable_car_queue if item['car_id'] != car_id]
+    if len(_cable_car_queue) < before:
+        print(f"[QUEUE-CABLE-OUT] {car_id}号缆机出队({reason}), 队列长度={len(_cable_car_queue)}")
+
+
+def _vehicle_queue_enter(vehicle_id, tid, grade_id, now, at_platform=False):
+    global _vehicle_queue
+    for item in _vehicle_queue:
+        if item['vehicle_id'] == vehicle_id:
+            if at_platform and item['priority'] != PRIORITY_AT_PLATFORM:
+                item['priority'] = PRIORITY_AT_PLATFORM
+                print(f"[QUEUE-VEHICLE-UPGRADE] {tid}号车优先级升级为at_platform")
+            if item['grade_id'] != grade_id:
+                item['grade_id'] = grade_id
+            return
+    priority = PRIORITY_AT_PLATFORM if at_platform else PRIORITY_ON_THE_WAY
+    _vehicle_queue.append({
+        'vehicle_id': vehicle_id,
+        'tid': tid,
+        'grade_id': grade_id,
+        'enter_time': now,
+        'priority': priority
+    })
+    p_label = 'at_platform' if at_platform else 'on_the_way'
+    print(f"[QUEUE-VEHICLE-IN] {tid}号车入队(级配={grade_id}, 优先级={p_label}), 队列长度={len(_vehicle_queue)}")
+
+
+def _vehicle_queue_exit(vehicle_id, reason=''):
+    global _vehicle_queue
+    before = len(_vehicle_queue)
+    _vehicle_queue = [item for item in _vehicle_queue if item['vehicle_id'] != vehicle_id]
+    if len(_vehicle_queue) < before:
+        print(f"[QUEUE-VEHICLE-OUT] 车辆{vehicle_id}出队({reason}), 队列长度={len(_vehicle_queue)}")
+
+
 def _try_complete_task_by_cable_car(car_id, local_db, now):
-    """触发源1：缆机 loading → delivering 时尝试完成任务"""
     task = local_db.execute(
-        '''SELECT id, vehicle_id FROM dispatch_tasks
-           WHERE cable_car_id = ? AND status = 'assigned'
+        '''SELECT t.id, t.vehicle_id, v.tid as vehicle_tid
+           FROM dispatch_tasks t
+           JOIN vehicles v ON t.vehicle_id = v.id
+           WHERE t.cable_car_id = ? AND t.status = 'assigned'
            LIMIT 1''',
         (car_id,)
     ).fetchone()
@@ -144,16 +209,18 @@ def _try_complete_task_by_cable_car(car_id, local_db, now):
                          ('idle', car_id))
         local_db.execute('UPDATE vehicles SET status = ?, grade_id = 0 WHERE id = ?',
                          ('idle', task['vehicle_id']))
+        _update_vehicle_unloading_port(task['vehicle_tid'], None, action='clear')
         print(f"[COMPLETE-CABLE] 任务#{task['id']} 已自动完成 ({car_id}号缆机开始送料)")
         return True
     return False
 
 
 def _try_complete_task_by_vehicle(vehicle_id, local_db, now):
-    """触发源2：车辆 going → returning 时尝试完成任务"""
     task = local_db.execute(
-        '''SELECT id, cable_car_id FROM dispatch_tasks
-           WHERE vehicle_id = ? AND status = 'assigned'
+        '''SELECT t.id, t.cable_car_id, v.tid as vehicle_tid
+           FROM dispatch_tasks t
+           JOIN vehicles v ON t.vehicle_id = v.id
+           WHERE t.vehicle_id = ? AND t.status = 'assigned'
            LIMIT 1''',
         (vehicle_id,)
     ).fetchone()
@@ -165,13 +232,14 @@ def _try_complete_task_by_vehicle(vehicle_id, local_db, now):
                          ('idle', task['cable_car_id']))
         local_db.execute('UPDATE vehicles SET status = ?, grade_id = 0 WHERE id = ?',
                          ('idle', vehicle_id))
+        _update_vehicle_unloading_port(task['vehicle_tid'], None, action='clear')
         print(f"[COMPLETE-VEHICLE] 任务#{task['id']} 已自动完成 (车辆{vehicle_id}已返程)")
         return True
     return False
 
 
 def sync_cable_cars():
-    """同步缆机数据并检测状态切换"""
+    """同步缆机数据并检测状态切换 + 管理缆机等待队列"""
     global _cable_car_prev_state
 
     try:
@@ -209,22 +277,16 @@ def sync_cable_cars():
                 print(f"[STATE] {car_id}号缆机状态切换: {prev_state} → {state}")
 
                 if prev_state == 'returning' and state == 'loading':
-                    print(f"[MATCH-TRIGGER] {car_id}号缆机到达装料区，开始匹配车辆")
-                    _matching_cable_cars[car_id] = {
-                        'start_time': now,
-                        'matched': False,
-                        'vehicle_id': None
-                    }
+                    current = local_db.execute('SELECT grade_id FROM cable_cars WHERE id = ?', (car_id,)).fetchone()
+                    grade_id = current['grade_id'] if current else 0
+                    _cable_car_queue_enter(car_id, grade_id, now)
 
                 if prev_state == 'loading' and state == 'delivering':
-                    if car_id in _matching_cable_cars:
-                        match_info = _matching_cable_cars.pop(car_id)
-                        if match_info['matched']:
-                            print(f"[MATCH-END] {car_id}号缆机开始送料，匹配任务继续执行")
-                        else:
-                            print(f"[MATCH-END] {car_id}号缆机开始送料，未匹配到车辆（可能已人工调度）")
-
+                    _cable_car_queue_exit(car_id, '开始送料')
                     _try_complete_task_by_cable_car(car_id, local_db, now)
+
+                if state not in ('loading',) and any(item['car_id'] == car_id for item in _cable_car_queue):
+                    _cable_car_queue_exit(car_id, f'状态变为{state}')
 
             _cable_car_prev_state[car_id] = state
 
@@ -236,7 +298,8 @@ def sync_cable_cars():
                     (latitude, longitude, altitude, xspeed, yspeed, start,
                      state, state_label, location, direction, updated_at, now, car_id))
             else:
-                if car_id in _matching_cable_cars and not _matching_cable_cars[car_id]['matched']:
+                in_queue = any(item['car_id'] == car_id for item in _cable_car_queue)
+                if in_queue:
                     new_status = 'matching'
                 else:
                     new_status = state if state in ['loading', 'unloading', 'delivering', 'returning'] else 'idle'
@@ -259,7 +322,7 @@ def sync_cable_cars():
 
 
 def sync_vehicles():
-    """同步车辆数据 - 增强版（状态识别 + 方向切换追踪 + 任务完成触发）"""
+    """同步车辆数据 - 增强版（状态识别 + 队列管理 + 任务完成触发）"""
     global _vehicle_prev_direction
 
     try:
@@ -296,10 +359,11 @@ def sync_vehicles():
             if prev_direction in ('going', 'idle') and direction == 'returning':
                 print(f"[VEHICLE-STATE] {tid}号车方向切换: {prev_direction} → returning")
 
-            existing = local_db.execute('SELECT id, status, direction FROM vehicles WHERE tid = ?', (tid,)).fetchone()
+            existing = local_db.execute('SELECT id, status, direction, grade_id FROM vehicles WHERE tid = ?', (tid,)).fetchone()
             if existing:
                 vehicle_id = existing['id']
                 old_direction = existing['direction']
+                grade_id = existing['grade_id']
 
                 if existing['status'] == 'assigned':
                     local_db.execute('''UPDATE vehicles SET result_x=?, result_y=?, speed=?, lat=?, lon=?,
@@ -312,6 +376,7 @@ def sync_vehicles():
 
                     if old_direction != 'returning' and direction == 'returning':
                         _try_complete_task_by_vehicle(vehicle_id, local_db, now)
+                        _vehicle_queue_exit(vehicle_id, '已返程')
                 else:
                     new_status = 'going' if direction == 'going' else 'idle'
                     local_db.execute('''UPDATE vehicles SET result_x=?, result_y=?, speed=?, lat=?, lon=?,
@@ -321,6 +386,16 @@ def sync_vehicles():
                         (result_x, result_y, speed, lat, lon, user_name, route, direction,
                          new_status, v_state, v_state_label, v_location,
                          updated_at, now, tid))
+
+                    if direction == 'going' and grade_id > 0:
+                        at_platform = v_state in ('unloading',) or (
+                            v_state == 'loading' and speed < 0.5
+                        )
+                        _vehicle_queue_enter(vehicle_id, tid, grade_id, now, at_platform=at_platform)
+                    elif direction == 'returning':
+                        _vehicle_queue_exit(vehicle_id, '已返程')
+                    elif grade_id == 0:
+                        _vehicle_queue_exit(vehicle_id, '级配清零')
             else:
                 new_status = 'going' if direction == 'going' else 'idle'
                 local_db.execute('''INSERT INTO vehicles (tid, name, grade_id, status, direction, result_x, result_y,
@@ -347,75 +422,180 @@ def send_match_message_to_vehicle(vehicle_id, cable_car_id, grade_name):
     return True
 
 
+def _update_vehicle_unloading_port(tid, cable_car_id, action='assign'):
+    """
+    更新 vehicle_system.data 表的 unloading_port 字段
+
+    Args:
+        tid: 车辆ID（datum_data.tid）
+        cable_car_id: 缆机ID
+        action: 'assign' 分配缆机 / 'clear' 清空缆机
+    """
+    try:
+        conn = _get_vehicle_conn()
+        cursor = conn.cursor()
+
+        if action == 'assign':
+            cursor.execute(
+                'UPDATE data SET unloading_port = %s WHERE tid = %s',
+                (cable_car_id, tid)
+            )
+            if cursor.rowcount > 0:
+                print(f"[DB-WRITE] 车辆{tid}的unloading_port设置为{cable_car_id}号缆机")
+            else:
+                print(f"[DB-WRITE-WARN] 车辆{tid}在data表中不存在，无法更新unloading_port")
+        else:  # clear
+            cursor.execute(
+                'UPDATE data SET unloading_port = NULL WHERE tid = %s',
+                (tid,)
+            )
+            if cursor.rowcount > 0:
+                print(f"[DB-WRITE] 车辆{tid}的unloading_port已清空")
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[DB-WRITE-ERROR] 更新vehicle_system.data失败: {e}")
+        return False
+
+
+def _cleanup_queues(db):
+    """清理队列中的无效条目"""
+    global _cable_car_queue, _vehicle_queue
+
+    valid_cars = set()
+    for row in db.execute('SELECT id FROM cable_cars').fetchall():
+        valid_cars.add(row['id'])
+
+    before = len(_cable_car_queue)
+    _cable_car_queue = [item for item in _cable_car_queue if item['car_id'] in valid_cars]
+    if len(_cable_car_queue) < before:
+        print(f"[QUEUE-CLEANUP] 缆机队列清理: {before} → {len(_cable_car_queue)}")
+
+    for item in _cable_car_queue:
+        car = db.execute('SELECT grade_id, status, state FROM cable_cars WHERE id = ?',
+                         (item['car_id'],)).fetchone()
+        if car:
+            item['grade_id'] = car['grade_id']
+            if car['status'] == 'assigned':
+                _cable_car_queue = [q for q in _cable_car_queue if q['car_id'] != item['car_id']]
+                print(f"[QUEUE-CLEANUP] {item['car_id']}号缆机已分配，移出队列")
+            elif car['state'] not in ('loading',):
+                _cable_car_queue = [q for q in _cable_car_queue if q['car_id'] != item['car_id']]
+                print(f"[QUEUE-CLEANUP] {item['car_id']}号缆机状态非loading，移出队列")
+
+    valid_vehicles = set()
+    for row in db.execute('SELECT id FROM vehicles').fetchall():
+        valid_vehicles.add(row['id'])
+
+    before = len(_vehicle_queue)
+    _vehicle_queue = [item for item in _vehicle_queue if item['vehicle_id'] in valid_vehicles]
+    if len(_vehicle_queue) < before:
+        print(f"[QUEUE-CLEANUP] 车辆队列清理: {before} → {len(_vehicle_queue)}")
+
+    for item in _vehicle_queue:
+        v = db.execute('SELECT grade_id, status, direction, state FROM vehicles WHERE id = ?',
+                       (item['vehicle_id'],)).fetchone()
+        if v:
+            item['grade_id'] = v['grade_id']
+            if v['status'] == 'assigned':
+                _vehicle_queue = [q for q in _vehicle_queue if q['vehicle_id'] != item['vehicle_id']]
+                print(f"[QUEUE-CLEANUP] 车辆{item['tid']}已分配，移出队列")
+            elif v['direction'] == 'returning':
+                _vehicle_queue = [q for q in _vehicle_queue if q['vehicle_id'] != item['vehicle_id']]
+                print(f"[QUEUE-CLEANUP] 车辆{item['tid']}已返程，移出队列")
+            elif v['grade_id'] == 0:
+                _vehicle_queue = [q for q in _vehicle_queue if q['vehicle_id'] != item['vehicle_id']]
+                print(f"[QUEUE-CLEANUP] 车辆{item['tid']}级配清零，移出队列")
+            elif v['state'] in ('unloading',) or (v['state'] == 'loading' and v['direction'] == 'going'):
+                if item['priority'] != PRIORITY_AT_PLATFORM:
+                    item['priority'] = PRIORITY_AT_PLATFORM
+                    print(f"[QUEUE-VEHICLE-UPGRADE] {item['tid']}号车到达平台，优先级升级")
+
+
 def auto_match():
-    """自动匹配逻辑"""
-    global _matching_cable_cars
+    """自动匹配逻辑 - FIFO + 优先级队列匹配"""
+    global _cable_car_queue, _vehicle_queue
 
     try:
         db = get_db()
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        matching_car_ids = [car_id for car_id, info in _matching_cable_cars.items()
-                           if not info['matched']]
+        _cleanup_queues(db)
 
-        if not matching_car_ids:
+        if not _cable_car_queue:
             db.close()
             return
 
-        print(f"[MATCH] 当前有{len(matching_car_ids)}台缆机正在匹配中: {matching_car_ids}")
+        _cable_car_queue.sort(key=lambda x: x['enter_time'])
 
-        cars = []
-        for car_id in matching_car_ids:
+        if not _vehicle_queue:
+            waiting_info = ', '.join([f"{item['car_id']}号(级配{item['grade_id']})" for item in _cable_car_queue])
+            print(f"[MATCH] {len(_cable_car_queue)}台缆机等待中: {waiting_info}, 暂无可用车辆")
+            db.close()
+            return
+
+        _vehicle_queue.sort(key=lambda x: (x['priority'], x['enter_time']))
+
+        print(f"[MATCH] 缆机队列={len(_cable_car_queue)}, 车辆队列={len(_vehicle_queue)}")
+
+        matched_vehicle_ids = set()
+
+        for car_item in list(_cable_car_queue):
+            car_id = car_item['car_id']
             car = db.execute('SELECT * FROM cable_cars WHERE id = ?', (car_id,)).fetchone()
-            if car:
-                cars.append(dict(car))
-
-        going_vehicles = [dict(r) for r in db.execute(
-            '''SELECT * FROM vehicles
-               WHERE direction = 'going' AND status = 'going' AND grade_id > 0
-               AND id NOT IN (SELECT vehicle_id FROM dispatch_tasks WHERE status = 'assigned')'''
-        ).fetchall()]
-
-        if not going_vehicles:
-            print(f"[MATCH] 暂无可用送料车辆")
-            db.close()
-            return
-
-        print(f"[MATCH] 找到{len(going_vehicles)}台可用送料车辆")
-
-        for car in cars:
-            car_id = car['id']
-
-            if car['grade_id'] == 0:
-                print(f"[MATCH] {car_id}号缆机未设置级配，跳过匹配")
+            if not car:
                 continue
 
-            matched_vehicle = None
-            for v in going_vehicles:
-                if v['grade_id'] == car['grade_id']:
-                    matched_vehicle = v
+            car_grade = car['grade_id']
+            if car_grade == 0:
+                print(f"[MATCH] {car_id}号缆机未设置级配，跳过")
+                continue
+
+            if car['status'] == 'assigned':
+                _cable_car_queue = [q for q in _cable_car_queue if q['car_id'] != car_id]
+                continue
+
+            best_vehicle = None
+            best_vehicle_item = None
+            for v_item in _vehicle_queue:
+                if v_item['vehicle_id'] in matched_vehicle_ids:
+                    continue
+                if v_item['grade_id'] == car_grade:
+                    best_vehicle_item = v_item
+                    v = db.execute('SELECT * FROM vehicles WHERE id = ?', (v_item['vehicle_id'],)).fetchone()
+                    if v:
+                        best_vehicle = dict(v)
                     break
 
-            if matched_vehicle:
-                print(f"[MATCH-SUCCESS] {car_id}号缆机({car.get('grade_name', '未知级配')}) ↔ {matched_vehicle['name']} 匹配成功")
+            if best_vehicle and best_vehicle_item:
+                grade_names = {1: '二级配', 2: '三级配', 3: '四级配', 4: '三级配PVA纤维', 5: '三级富浆'}
+                grade_name = grade_names.get(car_grade, f'级配{car_grade}')
+                p_label = '平台等待' if best_vehicle_item['priority'] == PRIORITY_AT_PLATFORM else '路上'
+
+                print(f"[MATCH-FIFO] {car_id}号缆机 ↔ {best_vehicle['name']} 匹配成功 "
+                      f"({grade_name}, 车辆{p_label}, 缆机等待时长={_wait_seconds(car_item['enter_time'])}s)")
 
                 db.execute(
                     'INSERT INTO dispatch_tasks (cable_car_id, vehicle_id, grade_id, status, created_at, assigned_at) VALUES (?, ?, ?, ?, ?, ?)',
-                    (car['id'], matched_vehicle['id'], car['grade_id'], 'assigned', now, now)
+                    (car['id'], best_vehicle['id'], car_grade, 'assigned', now, now)
                 )
 
                 db.execute('UPDATE cable_cars SET status = ? WHERE id = ?', ('assigned', car['id']))
-                db.execute('UPDATE vehicles SET status = ? WHERE id = ?', ('assigned', matched_vehicle['id']))
+                db.execute('UPDATE vehicles SET status = ? WHERE id = ?', ('assigned', best_vehicle['id']))
 
-                _matching_cable_cars[car_id]['matched'] = True
-                _matching_cable_cars[car_id]['vehicle_id'] = matched_vehicle['id']
+                _cable_car_queue = [q for q in _cable_car_queue if q['car_id'] != car_id]
+                matched_vehicle_ids.add(best_vehicle_item['vehicle_id'])
 
-                grade_name = matched_vehicle.get('grade_name', f'级配{matched_vehicle["grade_id"]}')
-                send_match_message_to_vehicle(matched_vehicle['id'], car['id'], grade_name)
+                send_match_message_to_vehicle(best_vehicle['id'], car['id'], grade_name)
 
-                going_vehicles.remove(matched_vehicle)
+                _update_vehicle_unloading_port(best_vehicle_item['tid'], car['id'], action='assign')
             else:
-                print(f"[MATCH-WAITING] {car_id}号缆机(级配{car['grade_id']}) 等待同级配车辆...")
+                print(f"[MATCH-WAITING] {car_id}号缆机(级配{car_grade}) 等待同级配车辆...")
+
+        _vehicle_queue = [item for item in _vehicle_queue if item['vehicle_id'] not in matched_vehicle_ids]
 
         db.commit()
         db.close()
@@ -426,6 +606,15 @@ def auto_match():
         traceback.print_exc()
 
 
+def _wait_seconds(enter_time_str):
+    try:
+        enter_time = datetime.strptime(enter_time_str, '%Y-%m-%d %H:%M:%S')
+        delta = (datetime.now() - enter_time).total_seconds()
+        return int(delta)
+    except:
+        return 0
+
+
 def auto_complete():
     """自动完成任务 - 兜底机制（OR逻辑：缆机送料 或 车辆返程）"""
     try:
@@ -433,7 +622,7 @@ def auto_complete():
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         tasks_by_vehicle = [dict(r) for r in db.execute(
-            '''SELECT t.id, t.cable_car_id, t.vehicle_id, v.tid as vehicle_tid, v.direction as vehicle_direction
+            '''SELECT t.id, t.cable_car_id, t.vehicle_id, v.tid as vehicle_tid
                FROM dispatch_tasks t
                JOIN vehicles v ON t.vehicle_id = v.id
                WHERE t.status = 'assigned' AND v.direction = 'returning' '''
@@ -446,11 +635,14 @@ def auto_complete():
                        ('idle', task['cable_car_id']))
             db.execute('UPDATE vehicles SET status = ?, grade_id = 0 WHERE id = ?',
                        ('idle', task['vehicle_id']))
+            _vehicle_queue_exit(task['vehicle_id'], '任务完成-车辆返程')
+            _update_vehicle_unloading_port(task['vehicle_tid'], None, action='clear')
             print(f"[COMPLETE-FALLBACK-VEHICLE] 任务#{task['id']} 已自动完成 (车辆{task['vehicle_tid']}已返程)")
 
         tasks_by_cable = [dict(r) for r in db.execute(
-            '''SELECT t.id, t.cable_car_id, t.vehicle_id, cc.state as cable_state
+            '''SELECT t.id, t.cable_car_id, t.vehicle_id, v.tid as vehicle_tid
                FROM dispatch_tasks t
+               JOIN vehicles v ON t.vehicle_id = v.id
                JOIN cable_cars cc ON t.cable_car_id = cc.id
                WHERE t.status = 'assigned' AND cc.state = 'delivering' '''
         ).fetchall()]
@@ -469,6 +661,8 @@ def auto_complete():
                        ('idle', task['cable_car_id']))
             db.execute('UPDATE vehicles SET status = ?, grade_id = 0 WHERE id = ?',
                        ('idle', task['vehicle_id']))
+            _cable_car_queue_exit(task['cable_car_id'], '任务完成-缆机送料')
+            _update_vehicle_unloading_port(task['vehicle_tid'], None, action='clear')
             print(f"[COMPLETE-FALLBACK-CABLE] 任务#{task['id']} 已自动完成 (缆机{task['cable_car_id']}正在送料)")
 
         db.commit()
