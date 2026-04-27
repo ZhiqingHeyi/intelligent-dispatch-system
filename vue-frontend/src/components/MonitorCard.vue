@@ -20,6 +20,15 @@
         <circle cx="12" cy="12" r="10"/>
         <path d="M12 6v6l4 2"/>
       </svg>
+      <svg v-else-if="icon === 'ai'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+      </svg>
+      <svg v-else-if="icon === 'ai_rate'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18 20V10"/>
+        <path d="M12 20V4"/>
+        <path d="M6 20v-6"/>
+      </svg>
       <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
         <polyline points="22 4 12 14.01 9 11.01"/>
@@ -47,9 +56,9 @@
 import { watch, ref } from 'vue'
 
 const props = defineProps<{
-  icon: 'return' | 'going' | 'active' | 'completed'
+  icon: 'return' | 'going' | 'active' | 'completed' | 'ai' | 'ai_rate'
   label: string
-  value: number
+  value: number | string
   color: string
 }>()
 
@@ -74,23 +83,31 @@ watch(() => props.value, (newVal, oldVal) => {
 .monitor-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(0, 212, 255, 0.1);
-  border-radius: 10px;
+  gap: clamp(6px, 0.8vw, 10px);
+  padding: clamp(8px, 1.2vh, 12px);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: clamp(8px, 1vw, 10px);
   transition: all 0.2s ease;
 }
 
+@media screen and (max-width: 1200px) {
+  .monitor-card {
+    gap: 6px;
+    padding: 8px;
+    border-radius: 8px;
+  }
+}
+
 .monitor-card:hover {
-  border-color: rgba(0, 212, 255, 0.25);
-  background: rgba(0, 0, 0, 0.3);
+  border-color: var(--accent-blue-border-hover);
+  background: var(--bg-subtle-hover);
   transform: translateY(-2px);
 }
 
 .monitor-icon {
-  width: 36px;
-  height: 36px;
+  width: clamp(28px, 3vw, 36px);
+  height: clamp(28px, 3vw, 36px);
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -99,8 +116,19 @@ watch(() => props.value, (newVal, oldVal) => {
 }
 
 .monitor-icon svg {
-  width: 20px;
-  height: 20px;
+  width: clamp(16px, 1.8vw, 20px);
+  height: clamp(16px, 1.8vw, 20px);
+}
+
+@media screen and (max-width: 1200px) {
+  .monitor-icon {
+    width: 28px;
+    height: 28px;
+  }
+  .monitor-icon svg {
+    width: 16px;
+    height: 16px;
+  }
 }
 
 .monitor-info {
@@ -110,7 +138,7 @@ watch(() => props.value, (newVal, oldVal) => {
 }
 
 .monitor-label {
-  font-size: 10px;
+  font-size: clamp(9px, 0.8vw, 10px);
   color: var(--text-muted);
   letter-spacing: 1px;
 }
@@ -118,14 +146,23 @@ watch(() => props.value, (newVal, oldVal) => {
 .monitor-value-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .monitor-value {
   font-family: 'Orbitron', monospace;
-  font-size: 22px;
+  font-size: clamp(16px, 2vw, 22px);
   font-weight: 700;
   line-height: 1;
+}
+
+@media screen and (max-width: 1200px) {
+  .monitor-label {
+    font-size: 9px;
+  }
+  .monitor-value {
+    font-size: 16px;
+  }
 }
 
 .monitor-trend {

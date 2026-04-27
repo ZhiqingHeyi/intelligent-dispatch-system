@@ -5,15 +5,12 @@
     </div>
     
     <div class="panel-body">
-      <!-- 数据监控 -->
       <DataMonitor />
       
-      <!-- 匹配区域 -->
       <div class="match-area">
         <MatchCenter />
       </div>
       
-      <!-- 任务列表 -->
       <TaskList />
     </div>
   </div>
@@ -61,9 +58,15 @@ const store = useDispatchStore()
   flex: 1;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 14px;
+  border-radius: clamp(10px, 1vw, 14px);
   overflow-y: auto;
   min-height: 0;
+}
+
+@media screen and (max-width: 1200px) {
+  .match-area {
+    border-radius: 10px;
+  }
 }
 
 .match-area::-webkit-scrollbar {
@@ -71,12 +74,12 @@ const store = useDispatchStore()
 }
 
 .match-area::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--scrollbar-track);
   border-radius: 2px;
 }
 
 .match-area::-webkit-scrollbar-thumb {
-  background: rgba(0, 212, 255, 0.2);
+  background: var(--scrollbar-thumb);
   border-radius: 2px;
 }
 
@@ -102,10 +105,10 @@ const store = useDispatchStore()
 .match-selected button,
 .match-action button {
   padding: 8px 24px;
-  background: linear-gradient(135deg, var(--accent-blue), var(--accent-green));
+  background: var(--btn-gradient);
   border: none;
   border-radius: 6px;
-  color: #000;
+  color: var(--btn-gradient-text);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -114,7 +117,7 @@ const store = useDispatchStore()
 .match-selected button:hover,
 .match-action button:hover {
   transform: scale(1.05);
-  box-shadow: 0 4px 16px rgba(0, 212, 255, 0.3);
+  box-shadow: 0 4px 16px var(--accent-blue-bg);
 }
 
 .match-selected button:disabled,
@@ -137,7 +140,7 @@ const store = useDispatchStore()
   align-items: center;
   gap: 12px;
   padding: 12px 20px;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--bg-subtle);
   border: 1px solid var(--border-color);
   border-radius: 10px;
   min-width: 280px;
@@ -170,9 +173,9 @@ const store = useDispatchStore()
 }
 
 .match-grade.no-grade {
-  background: rgba(255, 71, 87, 0.1);
+  background: var(--accent-red-bg);
   color: var(--accent-red);
-  border: 1px solid rgba(255, 71, 87, 0.3);
+  border: 1px solid var(--accent-red-border);
 }
 
 .match-placeholder {
@@ -202,13 +205,13 @@ const store = useDispatchStore()
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent-blue), var(--accent-green));
-  color: #000;
+  background: var(--btn-gradient);
+  color: var(--btn-gradient-text);
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: scale(1.05);
-  box-shadow: 0 4px 16px rgba(0, 212, 255, 0.3);
+  box-shadow: 0 4px 16px var(--accent-blue-bg);
 }
 
 .btn-primary:disabled {
@@ -218,23 +221,23 @@ const store = useDispatchStore()
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-subtle);
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-subtle-hover);
   color: var(--text-primary);
 }
 
 .match-warning {
   margin-top: 16px;
   padding: 10px 16px;
-  background: rgba(255, 159, 67, 0.1);
-  border: 1px solid rgba(255, 159, 67, 0.3);
+  background: var(--accent-yellow-bg);
+  border: 1px solid var(--accent-yellow-border);
   border-radius: 8px;
-  color: #ff9f43;
+  color: var(--accent-yellow);
   font-size: 13px;
 }
 

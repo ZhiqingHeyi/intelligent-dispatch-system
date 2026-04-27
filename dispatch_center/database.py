@@ -46,6 +46,9 @@ def init_db():
         grade_id INTEGER DEFAULT 0,
         status TEXT DEFAULT 'idle',
         direction TEXT DEFAULT 'idle',
+        state TEXT DEFAULT 'stopped',
+        state_label TEXT DEFAULT '停止',
+        location TEXT DEFAULT '',
         result_x REAL DEFAULT 0,
         result_y REAL DEFAULT 0,
         speed REAL DEFAULT 0,
@@ -56,6 +59,15 @@ def init_db():
         updated_at TEXT,
         synced_at TEXT
     )''')
+
+    try:
+        c.execute('SELECT state FROM vehicles LIMIT 1')
+    except:
+        c.execute('ALTER TABLE vehicles ADD COLUMN state TEXT DEFAULT "stopped"')
+        c.execute('ALTER TABLE vehicles ADD COLUMN state_label TEXT DEFAULT "停止"')
+        c.execute('ALTER TABLE vehicles ADD COLUMN location TEXT DEFAULT ""')
+        conn.commit()
+        print('[DB] 已添加 state, state_label, location 列到 vehicles 表')
 
     c.execute('''CREATE TABLE IF NOT EXISTS dispatch_tasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,6 +100,12 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+    try:
+        from ai_experience import init_ai_tables
+        init_ai_tables()
+    except Exception as e:
+        print(f'[DB] AI表初始化失败: {e}')
 
 def reset_vehicle_grades():
     conn = get_db()

@@ -1,12 +1,27 @@
 <template>
   <div class="loading-screen">
-    <div class="loading-logo">DISPATCH CENTER</div>
-    <div class="loading-bar">
-      <div class="loading-bar-fill"></div>
+    <div class="loading-content">
+      <div class="loading-logo">
+        <div class="logo-ring">
+          <div class="ring-outer"></div>
+          <div class="ring-inner"></div>
+          <div class="ring-core"></div>
+        </div>
+      </div>
+      <div class="loading-title">智能卸料动态匹配调度中心</div>
+      <div class="loading-subtitle">INTELLIGENT DISPATCH CENTER</div>
+      <div class="loading-bar">
+        <div class="bar-track">
+          <div class="bar-fill"></div>
+        </div>
+      </div>
+      <div class="loading-status">正在连接系统...</div>
     </div>
-    <div class="loading-text">系统初始化中...</div>
   </div>
 </template>
+
+<script setup lang="ts">
+</script>
 
 <style scoped>
 .loading-screen {
@@ -15,69 +30,119 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, #020617 0%, #0a1628 50%, #020617 100%);
+  background: var(--loading-bg);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   z-index: 9999;
-  animation: fadeOut 0.6s ease 1.2s forwards;
+}
+
+.loading-content {
+  text-align: center;
 }
 
 .loading-logo {
-  font-family: 'Orbitron', monospace;
-  font-size: 32px;
-  font-weight: 700;
-  letter-spacing: 8px;
-  background: linear-gradient(135deg, var(--accent-blue), var(--accent-green));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  margin-bottom: 40px;
+  margin-bottom: 30px;
+}
+
+.logo-ring {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto;
+}
+
+.ring-outer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: 2px solid var(--accent-blue-border);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 1.5s linear infinite;
+}
+
+.ring-inner {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  border: 2px solid var(--accent-green-border);
+  border-bottom-color: var(--accent-green);
+  border-radius: 50%;
+  animation: spin 1s linear infinite reverse;
+}
+
+.ring-core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  box-shadow: 0 0 20px var(--accent-blue), 0 0 40px var(--accent-blue-bg);
   animation: pulse 2s ease-in-out infinite;
 }
 
-.loading-bar {
-  width: 220px;
-  height: 3px;
-  background: rgba(0, 212, 255, 0.1);
-  border-radius: 2px;
-  overflow: hidden;
-  margin-bottom: 20px;
-}
-
-.loading-bar-fill {
-  height: 100%;
-  width: 0;
-  background: linear-gradient(90deg, var(--accent-blue), var(--accent-green));
-  animation: fillBar 1.5s ease-out forwards;
-}
-
-.loading-text {
-  font-size: 14px;
-  color: var(--text-muted);
-  letter-spacing: 4px;
-  animation: fadeIn 1s ease 0.5s forwards;
-  opacity: 0;
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 0.8; }
-  50% { opacity: 1; }
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  50% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.6; }
 }
 
-@keyframes fillBar {
-  0% { width: 0; }
-  100% { width: 100%; }
+.loading-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 4px;
+  margin-bottom: 8px;
 }
 
-@keyframes fadeIn {
-  to { opacity: 1; }
+.loading-subtitle {
+  font-family: 'Orbitron', monospace;
+  font-size: 10px;
+  letter-spacing: 6px;
+  color: var(--text-muted);
+  margin-bottom: 30px;
 }
 
-@keyframes fadeOut {
-  to {
-    opacity: 0;
-    visibility: hidden;
-  }
+.loading-bar {
+  width: 200px;
+  margin: 0 auto 16px;
+}
+
+.bar-track {
+  height: 3px;
+  background: var(--bg-subtle);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  width: 30%;
+  background: var(--btn-gradient);
+  border-radius: 2px;
+  animation: loading-slide 1.5s ease-in-out infinite;
+}
+
+@keyframes loading-slide {
+  0% { width: 0%; margin-left: 0; }
+  50% { width: 60%; margin-left: 20%; }
+  100% { width: 0%; margin-left: 100%; }
+}
+
+.loading-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 2px;
 }
 </style>

@@ -2,7 +2,6 @@
   <div class="match-center-content">
     <div class="mc-title">智能匹配状态</div>
 
-    <!-- 当前匹配中 -->
     <div v-if="assignedTasks.length > 0" class="mc-section">
       <div class="mc-section-title">
         <span class="mc-dot green"></span>当前匹配中
@@ -40,7 +39,6 @@
       </div>
     </div>
 
-    <!-- 等待匹配车辆 -->
     <div v-if="waitingCars.length > 0" class="mc-section">
       <div class="mc-section-title">
         <span class="mc-dot yellow"></span>等待匹配车辆
@@ -78,7 +76,6 @@
       </div>
     </div>
 
-    <!-- 待设置级配 -->
     <div v-if="ungradedCars.length > 0" class="mc-section">
       <div class="mc-section-title">
         <span class="mc-dot gray"></span>待设置级配
@@ -102,7 +99,6 @@
       </div>
     </div>
 
-    <!-- 空状态 -->
     <div
       v-if="assignedTasks.length === 0 && waitingCars.length === 0 && ungradedCars.length === 0"
       class="mc-empty"
@@ -155,16 +151,29 @@ const getMatchingVehicles = (car: CableCar) => {
 
 <style scoped>
 .match-center-content {
-  padding: 16px 20px;
+  padding: clamp(12px, 1.5vh, 16px) clamp(16px, 1.5vw, 20px);
+}
+
+@media screen and (max-width: 1200px) {
+  .match-center-content {
+    padding: 12px 16px;
+  }
 }
 
 .mc-title {
-  font-size: 15px;
+  font-size: clamp(13px, 1.4vw, 15px);
   font-weight: 600;
   color: var(--text-primary);
   text-align: center;
-  margin-bottom: 14px;
-  letter-spacing: 3px;
+  margin-bottom: clamp(10px, 1.2vh, 14px);
+  letter-spacing: clamp(2px, 0.3vw, 3px);
+}
+
+@media screen and (max-width: 1200px) {
+  .mc-title {
+    font-size: 13px;
+    margin-bottom: 10px;
+  }
 }
 
 .mc-section {
@@ -201,7 +210,6 @@ const getMatchingVehicles = (car: CableCar) => {
   background: var(--text-muted);
 }
 
-/* 响应式网格 */
 .mc-grid {
   display: grid;
   gap: 10px;
@@ -216,15 +224,21 @@ const getMatchingVehicles = (car: CableCar) => {
 }
 
 .mc-match-card {
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--match-card-bg);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 16px 20px;
+  border-radius: clamp(8px, 1vw, 12px);
+  padding: clamp(12px, 1.5vh, 16px) clamp(16px, 1.5vw, 20px);
   transition: all 0.2s ease;
 }
 
+@media screen and (max-width: 1200px) {
+  .mc-match-card {
+    padding: 12px 16px;
+  }
+}
+
 .mc-match-card:hover {
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--match-card-hover-bg);
   transform: translateY(-1px);
 }
 
@@ -266,8 +280,8 @@ const getMatchingVehicles = (car: CableCar) => {
 }
 
 .mc-entity-icon.car-icon {
-  background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(0, 255, 136, 0.1));
-  border: 1px solid rgba(0, 212, 255, 0.3);
+  background: var(--id-badge-bg);
+  border: 1px solid var(--id-badge-border);
   color: var(--accent-blue);
 }
 
@@ -293,14 +307,14 @@ const getMatchingVehicles = (car: CableCar) => {
 .mc-arrow-line {
   width: 100%;
   height: 2px;
-  background: rgba(0, 212, 255, 0.2);
+  background: var(--accent-blue-border);
   border-radius: 1px;
   position: relative;
   overflow: hidden;
 }
 
 .mc-arrow-line.matched {
-  background: rgba(0, 255, 136, 0.3);
+  background: var(--accent-green-border);
 }
 
 .mc-arrow-particle {

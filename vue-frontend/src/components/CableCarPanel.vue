@@ -74,8 +74,8 @@ const openStateModal = (car: CableCar) => {
 .panel-badge {
   font-size: 12px;
   padding: 4px 12px;
-  background: rgba(0, 212, 255, 0.1);
-  border: 1px solid rgba(0, 212, 255, 0.2);
+  background: var(--accent-blue-bg);
+  border: 1px solid var(--accent-blue-border);
   border-radius: 12px;
   color: var(--accent-blue);
 }
@@ -84,28 +84,34 @@ const openStateModal = (car: CableCar) => {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 6px;
+  padding-right: clamp(4px, 0.5vw, 6px);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: clamp(8px, 1vh, 10px);
 }
 
-/* 自定义滚动条 */
+@media screen and (max-width: 1200px) {
+  .panel-body {
+    gap: 8px;
+    padding-right: 4px;
+  }
+}
+
 .panel-body::-webkit-scrollbar {
   width: 4px;
 }
 
 .panel-body::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--scrollbar-track);
   border-radius: 2px;
 }
 
 .panel-body::-webkit-scrollbar-thumb {
-  background: rgba(0, 212, 255, 0.2);
+  background: var(--scrollbar-thumb);
   border-radius: 2px;
 }
 
 .panel-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 212, 255, 0.4);
+  background: var(--scrollbar-thumb-hover);
 }
 </style>

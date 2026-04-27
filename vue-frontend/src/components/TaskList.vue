@@ -72,18 +72,33 @@ const cancelTask = async (taskId: number) => {
 .task-panel {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 14px;
-  padding: 16px;
+  border-radius: clamp(10px, 1vw, 14px);
+  padding: clamp(12px, 1.5vh, 16px);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: clamp(12px, 1.5vh, 16px);
+}
+
+@media screen and (max-width: 1200px) {
+  .task-panel {
+    padding: 12px;
+    border-radius: 10px;
+    gap: 12px;
+  }
 }
 
 .task-section h3 {
-  font-size: 12px;
+  font-size: clamp(11px, 1vw, 12px);
   color: var(--text-muted);
-  margin-bottom: 10px;
+  margin-bottom: clamp(8px, 1vh, 10px);
   font-weight: 500;
+}
+
+@media screen and (max-width: 1200px) {
+  .task-section h3 {
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
 }
 
 .task-list {
@@ -101,11 +116,20 @@ const cancelTask = async (taskId: number) => {
 .task-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-  font-size: 12px;
+  gap: clamp(8px, 0.8vw, 10px);
+  padding: clamp(8px, 1vh, 10px) clamp(10px, 1vw, 12px);
+  background: var(--bg-subtle);
+  border-radius: clamp(6px, 0.8vw, 8px);
+  font-size: clamp(11px, 1vw, 12px);
+}
+
+@media screen and (max-width: 1200px) {
+  .task-card {
+    gap: 8px;
+    padding: 8px 10px;
+    font-size: 11px;
+    border-radius: 6px;
+  }
 }
 
 .task-card.active {
@@ -161,23 +185,25 @@ const cancelTask = async (taskId: number) => {
 }
 
 .task-btn.complete {
-  background: rgba(0, 255, 136, 0.1);
+  background: var(--accent-green-bg);
   color: var(--accent-green);
-  border: 1px solid rgba(0, 255, 136, 0.2);
+  border: 1px solid var(--accent-green-border);
 }
 
 .task-btn.complete:hover {
-  background: rgba(0, 255, 136, 0.2);
+  background: var(--accent-green-bg);
+  filter: brightness(1.2);
 }
 
 .task-btn.cancel {
-  background: rgba(255, 107, 107, 0.1);
+  background: var(--accent-red-bg);
   color: var(--accent-red);
-  border: 1px solid rgba(255, 107, 107, 0.2);
+  border: 1px solid var(--accent-red-border);
 }
 
 .task-btn.cancel:hover {
-  background: rgba(255, 107, 107, 0.2);
+  background: var(--accent-red-bg);
+  filter: brightness(1.2);
 }
 
 .empty-hint {

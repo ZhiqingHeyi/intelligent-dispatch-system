@@ -1,23 +1,40 @@
 <template>
-  <Teleport to="body">
-    <Transition name="toast">
-      <div v-if="modelValue" class="toast" :class="type">
-        {{ message }}
-      </div>
-    </Transition>
-  </Teleport>
+  <Transition name="toast">
+    <div v-if="visible" class="toast" :class="type">
+      <span class="toast-icon">{{ iconMap[type ?? 'info'] }}</span>
+      <span class="toast-message">{{ message }}</span>
+    </div>
+  </Transition>
 </template>
 
 <script setup lang="ts">
-defineProps<{
-  modelValue: boolean
+import { ref, watch } from 'vue'
+
+const props = defineProps<{
   message: string
-  type?: 'success' | 'error' | 'info'
+  type?: 'success' | 'error' | 'info' | 'warning'
+  duration?: number
 }>()
 
-defineEmits<{
-  'update:modelValue': [value: boolean]
-}>()
+const visible = ref(false)
+let timer: number | null = null
+
+const iconMap: Record<string, string> = {
+  success: '✓',
+  error: '✗',
+  info: 'ℹ',
+  warning: '⚠',
+}
+
+watch(() => props.message, (val) => {
+  if (val) {
+    visible.value = true
+    if (timer) clearTimeout(timer)
+    timer = window.setTimeout(() => {
+      visible.value = false
+    }, props.duration || 3000)
+  }
+})
 </script>
 
 <style scoped>
@@ -26,27 +43,46 @@ defineEmits<{
   top: 20px;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 12px 24px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
+  border-radius: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--modal-shadow);
   z-index: 10000;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(12px);
 }
 
 .toast.success {
-  background: rgba(0, 255, 136, 0.9);
-  color: #000;
+  border-color: var(--accent-green-border);
+  color: var(--accent-green);
 }
 
 .toast.error {
-  background: rgba(255, 107, 107, 0.9);
-  color: #fff;
+  border-color: var(--accent-red-border);
+  color: var(--accent-red);
 }
 
 .toast.info {
-  background: rgba(0, 212, 255, 0.9);
-  color: #000;
+  border-color: var(--accent-blue-border);
+  color: var(--accent-blue);
+}
+
+.toast.warning {
+  border-color: var(--accent-yellow-border);
+  color: var(--accent-yellow);
+}
+
+.toast-icon {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.toast-message {
+  font-size: 14px;
+  color: var(--text-primary);
 }
 
 .toast-enter-active,
@@ -54,7 +90,11 @@ defineEmits<{
   transition: all 0.3s ease;
 }
 
-.toast-enter-from,
+.toast-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-20px);
+}
+
 .toast-leave-to {
   opacity: 0;
   transform: translateX(-50%) translateY(-20px);

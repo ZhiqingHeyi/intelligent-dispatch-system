@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { StatusResponse, Task } from '@/types'
+import type { StatusResponse, AiConfig, AiChatResponse, AiSchedulerStatus } from '@/types'
 
 const api = axios.create({
   baseURL: '/api',
@@ -8,27 +8,22 @@ const api = axios.create({
   },
 })
 
-// 获取状态数据
 export const fetchStatus = () => {
   return api.get<StatusResponse>('/status')
 }
 
-// 设置缆机级配
 export const setCableCarGrade = (carId: number, gradeId: number) => {
   return api.post(`/cable-car/${carId}/grade`, { grade_id: gradeId })
 }
 
-// 设置缆机手动状态
 export const setCableCarState = (carId: number, manualState: string) => {
   return api.post(`/cable-car/${carId}/state`, { manual_state: manualState })
 }
 
-// 设置车辆级配
 export const setVehicleGrade = (vehicleId: number, gradeId: number) => {
   return api.post(`/vehicle/${vehicleId}/grade`, { grade_id: gradeId })
 }
 
-// 创建调度任务
 export const createTask = (cableCarId: number, vehicleId: number, gradeId: number) => {
   return api.post('/dispatch', {
     cable_car_id: cableCarId,
@@ -37,14 +32,60 @@ export const createTask = (cableCarId: number, vehicleId: number, gradeId: numbe
   })
 }
 
-// 完成任务
 export const completeTask = (taskId: number) => {
   return api.post(`/task/${taskId}/complete`)
 }
 
-// 取消任务
 export const cancelTask = (taskId: number) => {
   return api.post(`/task/${taskId}/cancel`)
+}
+
+export const aiChat = (message: string) => {
+  return api.post<AiChatResponse>('/ai/chat', { message })
+}
+
+export const aiDispatch = () => {
+  return api.post<AiChatResponse>('/ai/dispatch')
+}
+
+export const getAiConfig = () => {
+  return api.get<{ success: boolean; config: AiConfig }>('/ai/config')
+}
+
+export const saveAiConfig = (config: Partial<AiConfig>) => {
+  return api.post<{ success: boolean; message: string; verified: boolean; errors?: string[] }>('/ai/config', config)
+}
+
+export const testAiConnection = (config: Partial<AiConfig>) => {
+  return api.post<{ success: boolean; message: string }>('/ai/config/test', config)
+}
+
+export const getAiScheduler = () => {
+  return api.get<{ success: boolean; status: AiSchedulerStatus }>('/ai/scheduler')
+}
+
+export const startAiScheduler = () => {
+  return api.post('/ai/scheduler/start')
+}
+
+export const stopAiScheduler = () => {
+  return api.post('/ai/scheduler/stop')
+}
+
+export const getAiChatHistory = (limit = 50) => {
+  return api.get('/ai/chat/history', { params: { limit } })
+}
+
+export const clearAiChatHistory = () => {
+  return api.delete('/ai/chat/history')
+}
+
+export const getAiExperience = (params?: { grade_id?: number; outcome?: string; limit?: number }) => {
+  return api.get('/ai/experience', { params })
+}
+
+export const updateExperienceOutcome = (expId: number, data: { outcome: string; detail?: string; operator_override?: boolean; override_reason?: string }) => {
+  return api.post(`/ai/experience/${expId}/outcome`, data)
 }
 
 export default api

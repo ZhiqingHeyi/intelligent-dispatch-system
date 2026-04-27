@@ -1,28 +1,51 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-缆机状态识别器 - 基于位置+速度的四种状态精确识别
+状态识别器 - 缆机与车辆的状态精确识别
 
+=== 缆机状态识别 ===
 坐标系说明：
 - 装料平台区：latitude 50-150（低纬度）
 - 卸料平台区：latitude 280-450（高纬度）
 - xspeed > 0：向高纬度移动（向卸料区）→ 送料
 - xspeed < 0：向低纬度移动（向装料区）→ 返程
 
-四种状态：
+缆机四种状态：
 1. loading - 990平台接料
 2. delivering - 送料途中  
 3. unloading - 基坑卸料
 4. returning - 返程途中
+
+=== 车辆状态识别 ===
+坐标系说明：
+- 接料区(右端)：result_y > -400（Y值较大）
+- 卸料区(左端)：result_y < -800（Y值较小）
+- result_y 减小：送料方向（从右端向左端）
+- result_y 增大：返程方向（从左端向右端）
+
+车辆四种状态：
+1. loading - 接料区装料
+2. delivering - 送料途中
+3. unloading - 卸料区卸料
+4. returning - 返程途中
 """
 
-# 位置区域定义（根据实际数据校准）
+# ==================== 缆机位置区域定义 ====================
 LOADING_ZONE = (50, 150)      # 990平台接料区
 UNLOADING_ZONE = (280, 450)   # 基坑卸料区
 TRANSIT_ZONE = (150, 280)     # 中途区域
 
-# 速度阈值
+# 缆机速度阈值
 SPEED_THRESHOLD = 0.5         # 速度判定阈值
+
+# ==================== 车辆位置区域定义 ====================
+VEHICLE_LOADING_ZONE = (-400, 0)       # 接料区(右端)：result_y > -400
+VEHICLE_UNLOADING_ZONE = (-2000, -800) # 卸料区(左端)：result_y < -800
+VEHICLE_TRANSIT_ZONE = (-800, -400)    # 途中区域
+
+# 车辆速度阈值
+VEHICLE_SPEED_THRESHOLD = 0.5          # 车辆速度判定阈值
+VEHICLE_Y_DELTA_THRESHOLD = 10         # Y坐标变化阈值（过滤信号跳跃）
 
 
 def detect_cable_car_state(latitude, xspeed, start):
@@ -114,6 +137,84 @@ def detect_cable_car_state(latitude, xspeed, start):
         else:
             return "stopped", "停止", location
     
+    return "stopped", "停止", location
+
+
+def detect_vehicle_state(result_y, speed, y_trend=0):
+    """
+    检测车辆状态 - 基于位置、速度和Y坐标趋势的综合判断
+    
+    Args:
+        result_y: Y坐标（负值，右端约-338，左端约-1000）
+        speed: 车辆速度
+        y_trend: Y坐标变化趋势（滑动窗口计算的累计变化量）
+                 y_trend < 0: Y减小 → 送料方向
+                 y_trend > 0: Y增大 → 返程方向
+    
+    Returns:
+        state: 状态代码 (loading/delivering/unloading/returning/stopped)
+        state_label: 状态中文标签
+        location: 位置区域
+    """
+    if VEHICLE_LOADING_ZONE[0] <= result_y <= VEHICLE_LOADING_ZONE[1]:
+        location = "接料区(右端)"
+        location_code = "loading_zone"
+    elif VEHICLE_UNLOADING_ZONE[0] <= result_y <= VEHICLE_UNLOADING_ZONE[1]:
+        location = "卸料区(左端)"
+        location_code = "unloading_zone"
+    elif VEHICLE_TRANSIT_ZONE[0] <= result_y < VEHICLE_TRANSIT_ZONE[1]:
+        location = "途中区域"
+        location_code = "transit"
+    else:
+        location = "其他区域"
+        location_code = "unknown"
+
+    is_moving = speed is not None and float(speed) > VEHICLE_SPEED_THRESHOLD
+    has_trend = abs(y_trend) > VEHICLE_Y_DELTA_THRESHOLD
+
+    if location_code == "loading_zone":
+        if not is_moving:
+            return "loading", "接料区装料", location
+        else:
+            if has_trend and y_trend < -VEHICLE_Y_DELTA_THRESHOLD:
+                return "delivering", "送料途中", location
+            elif has_trend and y_trend > VEHICLE_Y_DELTA_THRESHOLD:
+                return "returning", "返程途中", location
+            else:
+                return "loading", "接料区装料", location
+
+    if location_code == "unloading_zone":
+        if not is_moving:
+            return "unloading", "卸料区卸料", location
+        else:
+            if has_trend and y_trend > VEHICLE_Y_DELTA_THRESHOLD:
+                return "returning", "返程途中", location
+            elif has_trend and y_trend < -VEHICLE_Y_DELTA_THRESHOLD:
+                return "delivering", "送料途中", location
+            else:
+                return "unloading", "卸料区卸料", location
+
+    if location_code == "transit":
+        if has_trend and y_trend < -VEHICLE_Y_DELTA_THRESHOLD:
+            return "delivering", "送料途中", location
+        elif has_trend and y_trend > VEHICLE_Y_DELTA_THRESHOLD:
+            return "returning", "返程途中", location
+        else:
+            if is_moving:
+                return "delivering", "送料途中", location
+            else:
+                return "stopped", "停止", location
+
+    if location_code == "unknown":
+        if has_trend and y_trend < -VEHICLE_Y_DELTA_THRESHOLD:
+            return "delivering", "送料途中", location
+        elif has_trend and y_trend > VEHICLE_Y_DELTA_THRESHOLD:
+            return "returning", "返程途中", location
+        elif is_moving:
+            return "delivering", "送料途中", location
+        else:
+            return "stopped", "停止", location
+
     return "stopped", "停止", location
 
 

@@ -1,38 +1,45 @@
 <template>
-  <Teleport to="body">
-    <Transition name="modal">
-      <div v-if="modelValue" class="modal-overlay" @click.self="close">
-        <div class="modal">
-          <div class="modal-header">
-            <h3>设置级配 - {{ targetName }}</h3>
-            <button class="modal-close" @click="close">&times;</button>
-          </div>
-          <div class="modal-body">
-            <div
-              v-for="grade in grades"
-              :key="grade.id"
-              class="grade-option"
-              :class="{ selected: currentGradeId === grade.id }"
-              :style="{ '--gc': grade.color }"
-              @click="selectGrade(grade.id)"
-            >
-              <div class="grade-option-dot" :style="{ background: grade.color }"></div>
-              <span class="grade-option-name">{{ grade.name }}</span>
-              <span v-if="currentGradeId === grade.id" class="grade-option-check">✓</span>
-            </div>
-            <div class="grade-option-clear" @click="selectGrade(0)">
-              <span>✕</span>
-              <span>清除级配</span>
-            </div>
-          </div>
+  <div v-if="show" class="modal-overlay" @click.self="close">
+    <div class="modal-content grade-modal">
+      <div class="modal-header">
+        <h3>设置级配 - {{ targetName }}</h3>
+        <button class="close-btn" @click="close">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="grade-grid">
+          <button
+            v-for="grade in store.grades"
+            :key="grade.id"
+            class="grade-option"
+            :class="{ selected: selectedGradeId === grade.id }"
+            :style="{
+              '--grade-color': grade.color,
+              background: selectedGradeId === grade.id ? grade.color + '20' : 'var(--bg-subtle)',
+              borderColor: selectedGradeId === grade.id ? grade.color : 'var(--border-color)',
+              color: selectedGradeId === grade.id ? grade.color : 'var(--text-secondary)'
+            }"
+            @click="selectedGradeId = grade.id"
+          >
+            <span class="grade-dot" :style="{ background: grade.color }"></span>
+            <span class="grade-name">{{ grade.name }}</span>
+          </button>
         </div>
       </div>
-    </Transition>
-  </Teleport>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" @click="clearGrade">清除级配</button>
+        <button class="btn-secondary" @click="close">取消</button>
+        <button class="btn-primary" @click="confirm">确认</button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import { useDispatchStore } from '@/stores/dispatch'
+import * as api from '@/api/dispatch'
 
 const props = defineProps<{
   modelValue: boolean
@@ -47,22 +54,50 @@ const emit = defineEmits<{
 }>()
 
 const store = useDispatchStore()
-const grades = store.grades
+const selectedGradeId = ref(0)
+
+const show = computed(() => props.modelValue)
+
+import { computed } from 'vue'
+
+watch(() => props.modelValue, (val) => {
+  if (val) {
+    selectedGradeId.value = props.currentGradeId
+  }
+})
+
+const confirm = async () => {
+  if (!props.targetId) return
+  try {
+    if (props.type === 'cable_car') {
+      await api.setCableCarGrade(props.targetId, selectedGradeId.value)
+    } else {
+      await api.setVehicleGrade(props.targetId, selectedGradeId.value)
+    }
+    await store.fetchData()
+    close()
+  } catch (e) {
+    alert('操作失败')
+  }
+}
+
+const clearGrade = async () => {
+  if (!props.targetId) return
+  try {
+    if (props.type === 'cable_car') {
+      await api.setCableCarGrade(props.targetId, 0)
+    } else {
+      await api.setVehicleGrade(props.targetId, 0)
+    }
+    await store.fetchData()
+    close()
+  } catch (e) {
+    alert('操作失败')
+  }
+}
 
 const close = () => {
   emit('update:modelValue', false)
-}
-
-const selectGrade = async (gradeId: number) => {
-  if (!props.targetId) return
-  
-  if (props.type === 'cable_car') {
-    await store.setCableCarGrade(props.targetId, gradeId)
-  } else {
-    await store.setVehicleGrade(props.targetId, gradeId)
-  }
-  
-  close()
 }
 </script>
 
@@ -73,140 +108,137 @@ const selectGrade = async (gradeId: number) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(8px);
+  background: var(--bg-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  backdrop-filter: blur(4px);
 }
 
-.modal {
-  background: var(--bg-card);
+.grade-modal {
+  width: 400px;
+  background: var(--modal-bg);
   border: 1px solid var(--border-color);
   border-radius: 16px;
-  width: 360px;
-  max-width: 90vw;
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
   overflow: hidden;
+  box-shadow: var(--modal-shadow);
 }
 
 .modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 20px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border-color);
 }
 
 .modal-header h3 {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.modal-close {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  border: none;
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-muted);
-  font-size: 20px;
+.close-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: all 0.2s;
 }
 
-.modal-close:hover {
-  background: rgba(255, 71, 87, 0.1);
+.close-btn:hover {
+  background: var(--close-btn-hover-bg);
   color: var(--accent-red);
 }
 
 .modal-body {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  padding: 20px;
+}
+
+.grade-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .grade-option {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   padding: 12px 16px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
   border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-subtle);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
+  font-size: 14px;
 }
 
 .grade-option:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--gc, rgba(0, 212, 255, 0.3));
-  box-shadow: 0 0 12px rgba(0, 212, 255, 0.06);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--shadow-color);
 }
 
 .grade-option.selected {
-  border-color: var(--gc, var(--accent-blue));
-  background: rgba(0, 212, 255, 0.05);
-  box-shadow: 0 0 16px rgba(0, 212, 255, 0.08);
+  font-weight: 600;
 }
 
-.grade-option-dot {
-  width: 14px;
-  height: 14px;
+.grade-dot {
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
-.grade-option-name {
-  flex: 1;
+.grade-name {
   font-size: 14px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.btn-secondary,
+.btn-primary {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 13px;
   font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-subtle-hover);
   color: var(--text-primary);
 }
 
-.grade-option-check {
-  color: var(--accent-green);
-  font-weight: 700;
-  font-size: 16px;
+.btn-primary {
+  background: var(--btn-gradient);
+  border: none;
+  color: var(--btn-gradient-text);
 }
 
-.grade-option-clear {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: rgba(255, 71, 87, 0.05);
-  border: 1px solid rgba(255, 71, 87, 0.15);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  color: var(--text-muted);
-}
-
-.grade-option-clear:hover {
-  background: rgba(255, 71, 87, 0.1);
-  border-color: rgba(255, 71, 87, 0.3);
-  color: var(--accent-red);
-}
-
-/* 过渡动画 */
-.modal-enter-active,
-.modal-leave-active {
-  transition: all 0.3s ease;
-}
-
-.modal-enter-from,
-.modal-leave-to {
-  opacity: 0;
-  transform: scale(0.95);
-}
-
-.modal-enter-to,
-.modal-leave-from {
-  opacity: 1;
-  transform: scale(1);
+.btn-primary:hover {
+  transform: scale(1.02);
+  box-shadow: 0 0 16px var(--accent-blue-bg);
 }
 </style>

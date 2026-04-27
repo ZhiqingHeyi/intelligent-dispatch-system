@@ -1,16 +1,13 @@
-// 状态类型
 export type ManualState = 'normal' | 'rest' | 'other'
 export type AutoState = 'loading' | 'delivering' | 'unloading' | 'returning'
 export type StateType = ManualState | AutoState
 
-// 级配类型
 export interface Grade {
   id: number
   name: string
   color: string
 }
 
-// 缆机类型
 export interface CableCar {
   id: number
   name: string
@@ -31,7 +28,6 @@ export interface CableCar {
   synced_at: string
 }
 
-// 车辆类型
 export interface Vehicle {
   id: number
   tid: number
@@ -39,6 +35,9 @@ export interface Vehicle {
   grade_id: number
   status: string
   direction: string
+  state: string
+  state_label: string
+  location: string
   result_x: number
   result_y: number
   speed: number
@@ -46,7 +45,6 @@ export interface Vehicle {
   lon: number
 }
 
-// 任务类型
 export interface Task {
   id: number
   cable_car_id: number
@@ -61,7 +59,6 @@ export interface Task {
   grade_color: string
 }
 
-// API 响应类型
 export interface StatusResponse {
   cable_cars: CableCar[]
   vehicles: Vehicle[]
@@ -70,7 +67,6 @@ export interface StatusResponse {
   recent_tasks: Task[]
 }
 
-// 状态配置
 export interface StateConfig {
   label: string
   color: string
@@ -85,4 +81,71 @@ export const STATE_CONFIG: Record<StateType, StateConfig> = {
   delivering: { label: '送料途中', color: '#00d4ff', type: 'auto' },
   unloading: { label: '基坑卸料', color: '#ff6b6b', type: 'auto' },
   returning: { label: '返程途中', color: '#00ff88', type: 'auto' },
+}
+
+export interface AiConfig {
+  api_url: string
+  api_key: string
+  api_key_configured?: boolean
+  model: string
+  temperature: number
+  max_tokens: number
+  enabled: boolean
+  auto_dispatch_enabled: boolean
+  dispatch_interval: number
+}
+
+export interface AiChatMessage {
+  id: number
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  tool_calls?: any[]
+  tool_result?: any
+  tool_results?: any[]
+  created_at: string
+}
+
+export interface AiSchedulerStatus {
+  running: boolean
+  enabled: boolean
+  interval: number
+  api_configured: boolean
+  last_dispatch_time: string
+  last_dispatch_success: boolean | null
+  dispatch_count: number
+  started_at: string
+}
+
+export interface AiExperience {
+  id: number
+  cable_car_id: number
+  vehicle_id: number
+  grade_id: number
+  grade_name: string
+  cable_car_state: string
+  vehicle_state: string
+  cable_car_latitude: number
+  vehicle_result_y: number
+  ai_reasoning: string
+  outcome: string
+  outcome_detail: string
+  operator_override: number
+  override_reason: string
+  created_at: string
+  resolved_at: string
+}
+
+export interface AiExperienceSummary {
+  total: number
+  success: number
+  failure: number
+  pending: number
+  overrides: number
+  success_rate: number
+}
+
+export interface AiChatResponse {
+  response: string
+  tool_results: any[]
+  success: boolean
 }

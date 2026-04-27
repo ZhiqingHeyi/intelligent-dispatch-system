@@ -6,7 +6,6 @@
   >
     <div class="card-glow-border"></div>
     
-    <!-- 顶部：名称和状态 -->
     <div class="cc-top">
       <div class="cc-name-row">
         <span class="cc-id-badge">{{ car.id }}</span>
@@ -25,7 +24,6 @@
       </span>
     </div>
     
-    <!-- 中间：位置信息 -->
     <div class="cc-info">
       <div class="cc-info-item">
         <span class="label">位置区域</span>
@@ -47,7 +45,6 @@
       </div>
     </div>
     
-    <!-- 底部：级配和状态 -->
     <div class="cc-grade">
       <span class="cc-grade-label">级配:</span>
       <span 
@@ -112,24 +109,31 @@ const grade = computed(() => store.grades.find(g => g.id === props.car.grade_id)
   position: relative;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 14px;
+  border-radius: clamp(10px, 1vw, 12px);
+  padding: clamp(10px, 1.2vh, 14px);
   backdrop-filter: blur(10px);
   transition: all 0.25s ease;
   cursor: pointer;
+  min-width: 0;
+}
+
+@media screen and (max-width: 1200px) {
+  .cable-car-card {
+    padding: 10px;
+    border-radius: 10px;
+  }
 }
 
 .cable-car-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 24px var(--shadow-color);
 }
 
 .cable-car-card.selected {
   border-color: var(--accent-blue);
-  box-shadow: 0 0 20px rgba(0, 212, 255, 0.15);
+  box-shadow: 0 0 20px var(--accent-blue-bg);
 }
 
-/* 状态边框色 */
 .cable-car-card.normal { border-color: rgba(0, 255, 136, 0.35); }
 .cable-car-card.rest { border-color: rgba(192, 132, 252, 0.35); }
 .cable-car-card.other { border-color: rgba(136, 136, 136, 0.35); }
@@ -145,7 +149,7 @@ const grade = computed(() => store.grades.find(g => g.id === props.car.grade_id)
   right: -1px;
   bottom: -1px;
   border-radius: 12px;
-  background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), transparent, rgba(0, 255, 136, 0.1));
+  background: var(--glow-border);
   z-index: -1;
   opacity: 0;
   transition: opacity 0.3s ease;
@@ -169,32 +173,47 @@ const grade = computed(() => store.grades.find(g => g.id === props.car.grade_id)
 }
 
 .cc-id-badge {
-  width: 28px;
-  height: 28px;
+  width: clamp(24px, 2vw, 28px);
+  height: clamp(24px, 2vw, 28px);
   border-radius: 6px;
-  background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(0, 255, 136, 0.1));
-  border: 1px solid rgba(0, 212, 255, 0.3);
+  background: var(--id-badge-bg);
+  border: 1px solid var(--id-badge-border);
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: 'Orbitron', monospace;
-  font-size: 13px;
+  font-size: clamp(11px, 1vw, 13px);
   font-weight: 700;
   color: var(--accent-blue);
 }
 
 .cc-name {
-  font-size: 15px;
+  font-size: clamp(13px, 1.2vw, 15px);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .cc-direction {
-  font-size: 11px;
-  padding: 3px 10px;
+  font-size: clamp(10px, 0.9vw, 11px);
+  padding: 3px 8px;
   border-radius: 4px;
   font-weight: 500;
   letter-spacing: 1px;
+}
+
+@media screen and (max-width: 1200px) {
+  .cc-id-badge {
+    width: 24px;
+    height: 24px;
+    font-size: 11px;
+  }
+  .cc-name {
+    font-size: 13px;
+  }
+  .cc-direction {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
 }
 
 .cc-info {
@@ -207,8 +226,15 @@ const grade = computed(() => store.grades.find(g => g.id === props.car.grade_id)
 .cc-info-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 4px;
+  font-size: clamp(10px, 0.9vw, 12px);
+}
+
+@media screen and (max-width: 1200px) {
+  .cc-info-item {
+    font-size: 10px;
+    gap: 3px;
+  }
 }
 
 .cc-info-item .label {
@@ -229,7 +255,7 @@ const grade = computed(() => store.grades.find(g => g.id === props.car.grade_id)
   align-items: center;
   gap: 8px;
   padding-top: 12px;
-  border-top: 1px solid rgba(30, 58, 110, 0.3);
+  border-top: 1px solid var(--grade-separator);
 }
 
 .cc-grade-label {
@@ -239,13 +265,20 @@ const grade = computed(() => store.grades.find(g => g.id === props.car.grade_id)
 }
 
 .cc-grade-badge {
-  font-size: 10px;
-  padding: 2px 8px;
+  font-size: clamp(9px, 0.8vw, 10px);
+  padding: 2px 6px;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
   font-weight: 500;
   white-space: nowrap;
+}
+
+@media screen and (max-width: 1200px) {
+  .cc-grade-badge {
+    font-size: 9px;
+    padding: 2px 5px;
+  }
 }
 
 .cc-grade-badge:hover {
@@ -254,20 +287,20 @@ const grade = computed(() => store.grades.find(g => g.id === props.car.grade_id)
 }
 
 .cc-grade-badge.no-grade {
-  background: rgba(74, 82, 112, 0.1);
+  background: var(--grade-no-bg);
   color: var(--text-muted);
   border: 1px dashed var(--text-muted);
 }
 
 .cc-grade-badge.state-btn {
-  background: rgba(100, 100, 100, 0.1);
-  color: #888;
-  border: 1px solid rgba(100, 100, 100, 0.3);
+  background: var(--state-btn-bg);
+  color: var(--state-btn-color);
+  border: 1px solid var(--state-btn-border);
   margin-left: 4px;
 }
 
 .cc-grade-badge.state-btn:hover {
-  background: rgba(100, 100, 100, 0.2);
+  background: var(--bg-subtle-hover);
 }
 
 .flex-spacer {

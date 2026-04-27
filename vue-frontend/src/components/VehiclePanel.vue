@@ -5,7 +5,6 @@
       <span class="panel-badge">{{ store.vehicles.length }}台</span>
     </div>
     
-    <!-- 级配筛选 -->
     <div class="grade-filter">
       <button 
         v-for="filter in filters" 
@@ -51,13 +50,13 @@ const store = useDispatchStore()
 const currentFilter = ref('all')
 
 const filters = computed(() => [
-  { label: '全部', value: 'all' },
+  { label: '全部', value: 'all', color: '' },
   ...store.grades.map(g => ({ 
     label: g.name, 
     value: g.name,
     color: g.color 
   })),
-  { label: '未分配', value: 'unassigned' }
+  { label: '未分配', value: 'unassigned', color: '' }
 ])
 
 const filteredVehicles = computed(() => {
@@ -126,8 +125,8 @@ const openGradeModal = (vehicle: Vehicle) => {
 .panel-badge {
   font-size: 12px;
   padding: 4px 12px;
-  background: rgba(0, 212, 255, 0.1);
-  border: 1px solid rgba(0, 212, 255, 0.2);
+  background: var(--accent-blue-bg);
+  border: 1px solid var(--accent-blue-border);
   border-radius: 12px;
   color: var(--accent-blue);
 }
@@ -144,8 +143,8 @@ const openGradeModal = (vehicle: Vehicle) => {
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(0, 212, 255, 0.15);
+  background: var(--bg-subtle);
+  border: 1px solid var(--accent-blue-border);
   border-radius: 4px;
   color: var(--text-muted);
   font-size: 11px;
@@ -155,8 +154,8 @@ const openGradeModal = (vehicle: Vehicle) => {
 
 .filter-btn:hover,
 .filter-btn.active {
-  background: rgba(0, 212, 255, 0.1);
-  border-color: rgba(0, 212, 255, 0.3);
+  background: var(--accent-blue-bg);
+  border-color: var(--accent-blue-border-hover);
   color: var(--text-primary);
 }
 
@@ -181,12 +180,12 @@ const openGradeModal = (vehicle: Vehicle) => {
 }
 
 .panel-body::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--scrollbar-track);
   border-radius: 2px;
 }
 
 .panel-body::-webkit-scrollbar-thumb {
-  background: rgba(0, 212, 255, 0.2);
+  background: var(--scrollbar-thumb);
   border-radius: 2px;
 }
 
@@ -218,7 +217,7 @@ const openGradeModal = (vehicle: Vehicle) => {
 .group-count {
   font-size: 11px;
   padding: 2px 8px;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--bg-subtle);
   border-radius: 10px;
   color: var(--text-muted);
   margin-left: auto;
@@ -226,7 +225,20 @@ const openGradeModal = (vehicle: Vehicle) => {
 
 .vehicle-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: clamp(6px, 0.8vw, 8px);
+}
+
+@media screen and (max-width: 1200px) {
+  .vehicle-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+}
+
+@media screen and (max-width: 1024px) {
+  .vehicle-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
