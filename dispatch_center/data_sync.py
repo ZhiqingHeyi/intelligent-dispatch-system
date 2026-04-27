@@ -454,12 +454,13 @@ def _update_vehicle_unloading_port(tid, cable_car_id, action='assign'):
             else:
                 print(f"[DB-WRITE-WARN] 车辆{tid}在data表中不存在，无法更新unloading_port")
         else:  # clear
+            # 注意：unloading_port 字段是 NOT NULL，用 0 表示清空/未分配
             cursor.execute(
-                'UPDATE data SET unloading_port = NULL WHERE tid = %s',
+                'UPDATE data SET unloading_port = 0 WHERE tid = %s',
                 (tid,)
             )
             if cursor.rowcount > 0:
-                print(f"[DB-WRITE] 车辆{tid}的unloading_port已清空")
+                print(f"[DB-WRITE] 车辆{tid}的unloading_port已清空(设置为0)")
 
         conn.commit()
         cursor.close()
