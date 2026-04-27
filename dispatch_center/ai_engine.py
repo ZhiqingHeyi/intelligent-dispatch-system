@@ -50,11 +50,35 @@ def _build_context_message():
     context += "\n=== 车辆状态 ===\n"
     for v in vehicles:
         grade_name = GRADE_NAMES.get(v.get('grade_id', 0), '未设置')
-        state_label = v.get('state_label', '') or {'going': '送料中', 'returning': '返程中', 'stopped': '停止', 'idle': '空闲'}.get(v.get('direction', ''), '未知')
+        # 使用新的状态标签
+        state_label = v.get('state_label', '')
+        if not state_label:
+            # 向后兼容：如果state_label为空，基于state或direction推断
+            state = v.get('state', '')
+            direction = v.get('direction', '')
+            state_map = {
+                'standby': '待命',
+                'delivering': '送料中',
+                'delivering_pause': '送料暂停',
+                'unloading': '卸料中',
+                'unloading_wait': '卸料等待',
+                'returning': '返程中'
+            }
+            state_label = state_map.get(state, '') or {'going': '送料中', 'returning': '返程中', 'stopped': '待命', 'idle': '待命'}.get(direction, '待命')
+
+        # 显示Y坐标区域信息
+        result_y = v.get('result_y', 0)
+        if result_y > 50:
+            zone = "接料区"
+        elif result_y < -950:
+            zone = "卸料区"
+        else:
+            zone = "送料途中"
+
         context += (f"  {v['name']}(ID={v['id']}): "
-                    f"状态={state_label}, "
+                    f"状态={state_label}({zone}), "
                     f"级配={grade_name}, "
-                    f"位置y={v.get('result_y', 0):.1f}, "
+                    f"Y坐标={result_y:.1f}, "
                     f"速度={v.get('speed', 0):.1f}, "
                     f"调度状态={v.get('status', 'idle')}\n")
 
