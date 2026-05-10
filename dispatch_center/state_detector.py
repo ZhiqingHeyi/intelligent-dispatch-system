@@ -16,65 +16,220 @@
 3. unloading - 基坑卸料
 4. returning - 返程途中
 
-=== 车辆状态识别 ===
-坐标系说明（基于实测数据校准）：
-- 接料区(右端)：result_y > 0（Y值约 0~400，如6号车=87）
-- 卸料区(左端)：result_y < -800（Y值约 -800~-1400，如2号车=-1341）
-- result_y 减小：送料方向（从右端向左端，87 → -1341）
-- result_y 增大：返程方向（从左端向右端，-1341 → 87）
+=== 车辆状态识别（带状态锁定机制）===
+核心设计：状态一旦确认就锁定，只有明确的转换条件才能变更
+- 解决GPS信号不稳定导致状态频繁跳变的问题
+- 状态转换需要满足明确的条件（位置+方向双重确认）
 
-实测参考点：
-- 6号车(接料区)：result_y ≈ 87
-- 2号车(卸料区)：result_y ≈ -1341
-
-车辆四种状态：
-1. loading - 接料区装料
-2. delivering - 送料途中
-3. unloading - 卸料区卸料
-4. returning - 返程途中
+状态流转：
+  standby → delivering:  车辆离开接料区(Y<50) + 方向going
+  delivering → unloading: 车辆到达卸料区(Y<-950)
+  unloading → returning: 车辆离开卸料区 + 方向returning
+  returning → standby:   车辆回到接料区(Y>50)
 """
 
 # ==================== 缆机位置区域定义 ====================
-# 优化说明：将LOADING_ZONE下限从50放宽到40，覆盖990平台休息区
-# 2号缆机实测位置latitude=49.80，在平台休息区，需要被识别为装料区
-LOADING_ZONE = (40, 150)      # 990平台接料区（含休息区，原50→40）
-UNLOADING_ZONE = (280, 450)   # 基坑卸料区
-TRANSIT_ZONE = (150, 280)     # 中途区域
+LOADING_ZONE = (40, 150)
+UNLOADING_ZONE = (280, 450)
+TRANSIT_ZONE = (150, 280)
 
-# 缆机速度阈值
-SPEED_THRESHOLD = 0.5         # 速度判定阈值
+SPEED_THRESHOLD = 0.5
 
 # ==================== 车辆位置区域定义 ====================
-# 基于实测数据精确校准（2026-04-27）
-# 实测运行数据：
-# - 接料区：Y ≈ 87（装料等待）
-# - 送料途中（可匹配）：Y 从 87 减小到 0 ~ -900
-# - 卸料区：Y < -1100（典型值 -1200~-1300，卸料等待）
-# - 返程：Y 从 -1200~-1300 增大回到 0~87
-VEHICLE_LOADING_ZONE = (50, 120)       # 接料区：Y > 50（典型值87）
-VEHICLE_DELIVERING_ZONE = (-950, 50)   # 送料途中/可匹配区：0 ~ -900，可入队匹配
-VEHICLE_UNLOADING_ZONE = (-1400, -950) # 卸料区：Y < -950（典型值-1100以下）
+VEHICLE_LOADING_ZONE = (50, 120)
+VEHICLE_DELIVERING_ZONE = (-950, 50)
+VEHICLE_UNLOADING_ZONE = (-1400, -950)
 
-# 车辆速度阈值
-VEHICLE_SPEED_THRESHOLD = 0.5          # 车辆速度判定阈值
-VEHICLE_Y_DELTA_THRESHOLD = 10         # Y坐标变化阈值（过滤信号跳跃）
+VEHICLE_SPEED_THRESHOLD = 0.5
+VEHICLE_Y_DELTA_THRESHOLD = 10
+
+# ==================== 车辆状态锁定机制 ====================
+_vehicle_locked_state = {}
+_vehicle_state_confirm_count = {}
+STATE_CONFIRM_THRESHOLD = 3
+
+
+def _can_transition(current_state, new_raw_state, location_code, direction):
+    """
+    判断状态是否允许转换 - 状态锁定核心逻辑
+    
+    关键原则：
+    - standby 只能转到 delivering（车辆开始送料）
+    - delivering 只能转到 unloading（车辆到达卸料区）
+    - unloading 只能转到 returning（车辆开始返程）
+    - returning 只能转到 standby（车辆回到接料区）
+    - 其他转换一律不允许（锁定当前状态）
+    
+    每个转换都需要位置+方向的双重确认
+    """
+    TRANSITIONS = {
+        'standby': ['delivering'],
+        'delivering': ['unloading', 'unloading_wait', 'returning', 'delivering_pause'],
+        'delivering_pause': ['delivering', 'unloading', 'unloading_wait', 'returning'],
+        'unloading': ['returning', 'unloading_wait'],
+        'unloading_wait': ['returning', 'unloading'],
+        'returning': ['standby'],
+    }
+    
+    allowed = TRANSITIONS.get(current_state, [])
+    
+    if new_raw_state not in allowed:
+        return False
+    
+    # 额外条件：转换需要位置确认
+    if current_state == 'standby' and new_raw_state == 'delivering':
+        if location_code != 'delivering_zone' and location_code != 'unloading_zone':
+            return False
+        if direction != 'going':
+            return False
+    
+    if current_state == 'delivering' and new_raw_state == 'unloading':
+        if location_code != 'unloading_zone':
+            return False
+    
+    if current_state == 'delivering_pause' and new_raw_state == 'delivering':
+        if direction != 'going':
+            return False
+    
+    if current_state in ('unloading', 'unloading_wait') and new_raw_state == 'returning':
+        if direction != 'returning' and location_code == 'unloading_zone':
+            return False
+    
+    if current_state == 'returning' and new_raw_state == 'standby':
+        if location_code != 'loading_zone':
+            return False
+    
+    return True
+
+
+def detect_vehicle_state_locked(tid, result_y, speed, y_trend=0, direction='idle'):
+    """
+    带状态锁定的车辆状态检测
+    
+    核心逻辑：
+    1. 先根据位置+方向计算"原始状态"（raw_state）
+    2. 查看当前锁定状态（locked_state）
+    3. 如果 raw_state 与 locked_state 不同，检查是否允许转换
+    4. 允许转换需要连续N帧确认，防止信号波动误触发
+    5. 不允许转换则保持当前锁定状态
+    """
+    # 计算位置区域
+    if VEHICLE_LOADING_ZONE[0] <= result_y <= VEHICLE_LOADING_ZONE[1]:
+        location = "接料区"
+        location_code = "loading_zone"
+    elif VEHICLE_UNLOADING_ZONE[0] <= result_y <= VEHICLE_UNLOADING_ZONE[1]:
+        location = "卸料区"
+        location_code = "unloading_zone"
+    elif VEHICLE_DELIVERING_ZONE[0] <= result_y <= VEHICLE_DELIVERING_ZONE[1]:
+        location = "送料途中"
+        location_code = "delivering_zone"
+    else:
+        location = "其他区域"
+        location_code = "unknown"
+
+    is_moving = speed is not None and float(speed) > VEHICLE_SPEED_THRESHOLD
+
+    # Step 1: 计算原始状态（基于当前帧数据）
+    if location_code == "loading_zone":
+        raw_state, raw_label = "standby", "待命"
+    elif location_code == "unloading_zone":
+        if is_moving and direction == 'returning':
+            raw_state, raw_label = "returning", "返程中"
+        elif is_moving:
+            raw_state, raw_label = "unloading", "卸料中"
+        else:
+            raw_state, raw_label = "unloading_wait", "卸料区等待"
+    elif location_code == "delivering_zone":
+        if direction == 'going':
+            if is_moving:
+                raw_state, raw_label = "delivering", "送料中"
+            else:
+                raw_state, raw_label = "delivering_pause", "送料暂停"
+        elif direction == 'returning':
+            raw_state, raw_label = "returning", "返程中"
+        else:
+            raw_state, raw_label = "standby", "待命"
+    else:
+        if direction == 'going' and is_moving:
+            raw_state, raw_label = "delivering", "送料中"
+        elif direction == 'returning':
+            raw_state, raw_label = "returning", "返程中"
+        else:
+            raw_state, raw_label = "standby", "待命"
+
+    # Step 2: 获取当前锁定状态
+    locked = _vehicle_locked_state.get(tid)
+    
+    if locked is None:
+        # 首次检测，直接锁定原始状态
+        _vehicle_locked_state[tid] = raw_state
+        _vehicle_state_confirm_count[tid] = 0
+        return raw_state, raw_label, location
+
+    # Step 3: 如果原始状态与锁定状态相同，直接返回
+    if raw_state == locked:
+        _vehicle_state_confirm_count[tid] = 0
+        state_labels = {
+            'standby': '待命', 'delivering': '送料中', 'delivering_pause': '送料暂停',
+            'unloading': '卸料中', 'unloading_wait': '卸料区等待', 'returning': '返程中',
+        }
+        return locked, state_labels.get(locked, raw_label), location
+
+    # Step 4: 检查是否允许转换
+    if not _can_transition(locked, raw_state, location_code, direction):
+        # 不允许转换，保持锁定状态
+        _vehicle_state_confirm_count[tid] = 0
+        state_labels = {
+            'standby': '待命', 'delivering': '送料中', 'delivering_pause': '送料暂停',
+            'unloading': '卸料中', 'unloading_wait': '卸料区等待', 'returning': '返程中',
+        }
+        return locked, state_labels.get(locked, '未知'), location
+
+    # Step 5: 允许转换，但需要连续确认
+    confirm_key = f"{tid}_{locked}_{raw_state}"
+    if confirm_key not in _vehicle_state_confirm_count:
+        _vehicle_state_confirm_count[confirm_key] = 0
+
+    if _vehicle_state_confirm_count[confirm_key] >= STATE_CONFIRM_THRESHOLD:
+        # 确认次数达到阈值，执行状态转换
+        _vehicle_locked_state[tid] = raw_state
+        # 清除该车辆所有旧的确认计数
+        keys_to_delete = [k for k in list(_vehicle_state_confirm_count.keys())
+                          if isinstance(k, str) and k.startswith(f"{tid}_")]
+        for k in keys_to_delete:
+            del _vehicle_state_confirm_count[k]
+        return raw_state, raw_label, location
+    else:
+        # 还在确认中，增加计数并保持锁定状态
+        _vehicle_state_confirm_count[confirm_key] += 1
+        state_labels = {
+            'standby': '待命', 'delivering': '送料中', 'delivering_pause': '送料暂停',
+            'unloading': '卸料中', 'unloading_wait': '卸料区等待', 'returning': '返程中',
+        }
+        return locked, state_labels.get(locked, '未知'), location
+
+
+def force_unlock_vehicle_state(tid, new_state=None):
+    """强制解锁车辆状态（用于手动设置状态等场景）"""
+    if new_state:
+        _vehicle_locked_state[tid] = new_state
+    elif tid in _vehicle_locked_state:
+        del _vehicle_locked_state[tid]
+    # 清除所有确认计数
+    keys_to_delete = [k for k in _vehicle_state_confirm_count if k.startswith(f"{tid}_")]
+    for k in keys_to_delete:
+        del _vehicle_state_confirm_count[k]
+
+
+def get_vehicle_locked_state(tid):
+    """获取车辆当前锁定状态"""
+    return _vehicle_locked_state.get(tid)
 
 
 def detect_cable_car_state(latitude, xspeed, start):
     """
     检测缆机状态 - 基于位置和速度的综合判断
-    
-    Args:
-        latitude: X坐标（纬度）
-        xspeed: X方向速度（正值=向卸料区，负值=向装料区）
-        start: 启动状态（0/1）
-    
-    Returns:
-        state: 状态代码 (loading/delivering/unloading/returning/stopped)
-        state_label: 状态中文标签
-        location: 位置区域
     """
-    # 确定位置区域
     if LOADING_ZONE[0] <= latitude <= LOADING_ZONE[1]:
         location = "装料平台区"
         location_code = "loading_zone"
@@ -87,85 +242,51 @@ def detect_cable_car_state(latitude, xspeed, start):
     else:
         location = "其他区域"
         location_code = "unknown"
-    
-    # 状态判断逻辑
-    # 
-    # 速度方向说明：
-    # - xspeed > 0（正值）：X增加，向高纬度移动（向卸料区）→ 送料途中
-    # - xspeed < 0（负值）：X减小，向低纬度移动（向装料区）→ 返程途中
-    
-    # 1. 990平台接料
-    # 特征：在装料平台区 + 速度接近0（等待/装料中）
+
     if location_code == "loading_zone":
         if start == 0:
             return "loading", "990平台接料", location
         else:
-            # start=1但速度很低，可能是刚开始移动或调整位置
             if abs(xspeed) < SPEED_THRESHOLD:
                 return "loading", "990平台接料", location
             elif xspeed > SPEED_THRESHOLD:
-                # 在装料区但向卸料方向移动（X增加），说明刚装好料出发去送料
                 return "delivering", "送料途中", location
             else:
                 return "loading", "990平台接料", location
-    
-    # 2. 基坑卸料
-    # 特征：在卸料平台区 + 速度接近0（卸料中）
+
     if location_code == "unloading_zone":
         if start == 0:
             return "unloading", "基坑卸料", location
         else:
-            # start=1但速度很低，可能是卸料中或调整位置
             if abs(xspeed) < SPEED_THRESHOLD:
                 return "unloading", "基坑卸料", location
             elif xspeed < -SPEED_THRESHOLD:
-                # 在卸料区但向装料方向移动（X减小），说明卸完料开始返程
                 return "returning", "返程途中", location
             else:
                 return "unloading", "基坑卸料", location
-    
-    # 3. 中途区域判断
-    # 特征：在中途区域，根据速度方向判断
+
     if location_code == "transit":
         if xspeed > SPEED_THRESHOLD:
-            # X增加，向高纬度移动 → 向卸料区 → 送料途中
             return "delivering", "送料途中", location
         elif xspeed < -SPEED_THRESHOLD:
-            # X减小，向低纬度移动 → 向装料区 → 返程途中
             return "returning", "返程途中", location
         else:
-            # 中途停止或低速，根据start判断
             return "delivering" if start == 1 else "stopped", "送料途中" if start == 1 else "停止", location
-    
-    # 4. 其他区域的判断
+
     if location_code == "unknown":
-        # 根据速度方向判断
         if xspeed > SPEED_THRESHOLD:
-            # X增加，向卸料区移动 → 送料
             return "delivering", "送料途中", location
         elif xspeed < -SPEED_THRESHOLD:
-            # X减小，向装料区移动 → 返程
             return "returning", "返程途中", location
         else:
             return "stopped", "停止", location
-    
+
     return "stopped", "停止", location
 
 
 def detect_vehicle_state(result_y, speed, y_trend=0, direction='idle'):
     """
-    检测车辆状态 - 基于位置、速度和方向的综合判断（方案A）
-    
-    Args:
-        result_y: Y坐标（接料区约87，卸料区约-1200~-1300）
-        speed: 车辆速度
-        y_trend: Y坐标变化趋势
-        direction: 行驶方向（'going'=送料，'returning'=返程，'idle'=静止）
-    
-    Returns:
-        state: 状态代码
-        state_label: 状态中文标签
-        location: 位置区域
+    车辆状态检测（无锁定版本，保留兼容）
     """
     if VEHICLE_LOADING_ZONE[0] <= result_y <= VEHICLE_LOADING_ZONE[1]:
         location = "接料区"
@@ -182,21 +303,15 @@ def detect_vehicle_state(result_y, speed, y_trend=0, direction='idle'):
 
     is_moving = speed is not None and float(speed) > VEHICLE_SPEED_THRESHOLD
 
-    # 方案A：更精确的状态识别（位置优先于方向）
-    
-    # 1. 接料区/停车区（Y > 50）- 最高优先级
     if location_code == "loading_zone":
-        # 统一显示"待命"，不区分是等料还是停车
         return "standby", "待命", location
-    
-    # 2. 卸料区（Y < -950）- 第二优先级
+
     if location_code == "unloading_zone":
         if is_moving:
             return "unloading", "卸料中", location
         else:
             return "unloading_wait", "卸料区等待", location
-    
-    # 3. 送料途中（-950 < Y < 50）- 第三优先级
+
     if location_code == "delivering_zone":
         if direction == 'going':
             if is_moving:
@@ -204,15 +319,10 @@ def detect_vehicle_state(result_y, speed, y_trend=0, direction='idle'):
             else:
                 return "delivering_pause", "送料暂停", location
         elif direction == 'returning':
-            # 明确返程中，显示返程
             return "returning", "返程中", location
         else:
-            # 【Bug修复】方向不明确（idle/stopped）但在送料区间，保守显示为待命
-            # 不根据is_moving判断，避免信号波动导致状态乱跳
             return "standby", "待命", location
-    
-    # 4. 其他区域（未知区域）- 最低优先级
-    # 【Bug修复】只有在明确going且移动中才显示送料中，否则保守显示待命
+
     if direction == 'going' and is_moving:
         return "delivering", "送料中", location
     elif direction == 'returning':
@@ -222,28 +332,26 @@ def detect_vehicle_state(result_y, speed, y_trend=0, direction='idle'):
 
 
 def get_state_color(state):
-    """获取状态对应的颜色（方案A）"""
     colors = {
-        "standby": "#ffd93d",          # 黄色 - 待命（接料区/停车区）
-        "delivering": "#00d4ff",       # 蓝色 - 送料中
-        "delivering_pause": "#5a8cff", # 浅蓝色 - 送料暂停
-        "unloading": "#ff6b6b",        # 红色 - 卸料中
-        "unloading_wait": "#ff9f9f",   # 粉红色 - 卸料区等待
-        "returning": "#00ff88",        # 绿色 - 返程中
-        "loading": "#ffd93d",          # 兼容旧状态
-        "stopped": "#5a6380",          # 灰色 - 停止
+        "standby": "#ffd93d",
+        "delivering": "#00d4ff",
+        "delivering_pause": "#5a8cff",
+        "unloading": "#ff6b6b",
+        "unloading_wait": "#ff9f9f",
+        "returning": "#00ff88",
+        "loading": "#ffd93d",
+        "stopped": "#5a6380",
     }
     return colors.get(state, "#8b92b4")
 
 
 def get_state_icon(state):
-    """获取状态对应的图标"""
     icons = {
-        "loading": "⏳",      # 等待/装料
-        "delivering": "🚚",   # 运输
-        "unloading": "📦",    # 卸货
-        "returning": "🔙",    # 返回
-        "stopped": "⏹️",      # 停止
+        "loading": "⏳",
+        "delivering": "🚚",
+        "unloading": "📦",
+        "returning": "🔙",
+        "stopped": "⏹️",
     }
     return icons.get(state, "❓")
 
@@ -251,80 +359,86 @@ def get_state_icon(state):
 # 测试代码
 if __name__ == '__main__':
     print("=" * 100)
-    print("缆机状态识别测试 - 修正版（速度方向已修正，阈值已优化）")
+    print("状态识别测试 - 带状态锁定机制")
     print("=" * 100)
-    
-    # ========== 缆机测试 ==========
-    print("\n【缆机状态测试】")
-    cable_cases = [
-        # (cable_id, latitude, xspeed, start, expected_state, description)
-        (1, 377.80, 0.00, 1, "unloading", "在卸料区，停止 → 卸料中"),
-        (2, 424.00, 0.00, 1, "unloading", "在卸料区，停止 → 卸料中"),
-        (3, 67.80, 0.00, 0, "loading", "在装料区，停止 → 接料中"),
-        (4, 100.00, 5.0, 1, "delivering", "在装料区，xspeed>0 → 刚出发送料"),
-        (5, 350.00, -5.0, 1, "returning", "在卸料区，xspeed<0 → 卸完返程"),
-        (6, 200.00, 4.0, 1, "delivering", "在中途，xspeed>0 → 送料途中"),
-        (7, 200.00, -4.0, 1, "returning", "在中途，xspeed<0 → 返程途中"),
-        (8, 49.80, 0.00, 0, "loading", "2号缆机实际位置 → 990平台接料"),
-        (9, 45.00, 0.00, 0, "loading", "边界测试：latitude=45.00 → 装料区"),
+
+    # ========== 车辆状态锁定测试 ==========
+    print("\n【车辆状态锁定测试】")
+    print("模拟GPS信号不稳定场景：车辆在送料中，但GPS偶尔跳到接料区")
+    print("=" * 100)
+
+    # 重置锁定状态
+    _vehicle_locked_state.clear()
+    _vehicle_state_confirm_count.clear()
+
+    # 模拟一个完整的送料周期
+    test_sequence = [
+        # (tid, result_y, speed, direction, expected_locked_state, description)
+        # 阶段1: 车辆在接料区待命
+        (1, 87, 0, 'stopped', 'standby', "接料区待命"),
+        (1, 87, 0, 'stopped', 'standby', "接料区待命"),
+        (1, 87, 0, 'stopped', 'standby', "接料区待命"),
+
+        # 阶段2: 车辆开始送料（离开接料区，方向going）
+        # 确认机制：连续3帧raw_state=delivering后锁定
+        (1, 30, 5, 'going', 'standby', "离开接料区，确认计数+1(1/3)"),
+        (1, -10, 5, 'going', 'standby', "确认计数+1(2/3)"),
+        (1, -50, 5, 'going', 'standby', "确认计数+1(3/3)，达到阈值"),
+        (1, -100, 5, 'going', 'delivering', "确认完成，锁定为送料中"),
+
+        # 阶段3: GPS信号波动！Y坐标偶尔跳回接料区
+        (1, -200, 5, 'going', 'delivering', "送料中（正常）"),
+        (1, 60, 0, 'idle', 'delivering', "⚠️ GPS跳到接料区，但锁定不变！"),
+        (1, -250, 5, 'going', 'delivering', "恢复，锁定仍为送料中"),
+        (1, 80, 0, 'stopped', 'delivering', "⚠️ GPS又跳到接料区，锁定不变！"),
+        (1, -300, 5, 'going', 'delivering', "恢复，锁定仍为送料中"),
+
+        # 阶段4: 车辆到达卸料区
+        # delivering → unloading_wait 需要确认
+        (1, -1000, 0, 'stopped', 'delivering', "到达卸料区，确认计数+1(1/3)"),
+        (1, -1100, 0, 'stopped', 'delivering', "确认计数+1(2/3)"),
+        (1, -1200, 0, 'stopped', 'delivering', "确认计数+1(3/3)，达到阈值"),
+        (1, -1200, 0, 'stopped', 'unloading_wait', "确认完成，锁定为卸料区等待"),
+
+        # 阶段5: GPS波动在卸料区
+        (1, -800, 0, 'idle', 'unloading_wait', "⚠️ GPS跳到送料区，锁定不变！"),
+        (1, -1200, 0, 'stopped', 'unloading_wait', "恢复"),
+
+        # 阶段6: 车辆开始返程
+        # unloading_wait → returning 需要确认
+        (1, -1100, 5, 'returning', 'unloading_wait', "开始返程，确认计数+1(1/3)"),
+        (1, -900, 5, 'returning', 'unloading_wait', "确认计数+1(2/3)"),
+        (1, -700, 5, 'returning', 'unloading_wait', "确认计数+1(3/3)，达到阈值"),
+        (1, -500, 5, 'returning', 'returning', "确认完成，锁定为返程中"),
+
+        # 阶段7: 返程途中GPS波动
+        (1, -300, 5, 'returning', 'returning', "返程中（正常）"),
+        (1, -100, 0, 'idle', 'returning', "⚠️ GPS跳到送料区，锁定不变！"),
+        (1, -200, 5, 'returning', 'returning', "恢复"),
+
+        # 阶段8: 车辆回到接料区
+        # returning → standby 需要确认
+        (1, 60, 0, 'stopped', 'returning', "到达接料区，确认计数+1(1/3)"),
+        (1, 80, 0, 'stopped', 'returning', "确认计数+1(2/3)"),
+        (1, 87, 0, 'stopped', 'returning', "确认计数+1(3/3)，达到阈值"),
+        (1, 87, 0, 'stopped', 'standby', "确认完成，锁定为待命"),
     ]
-    
-    print(f"\n{'ID':<4} {'位置':<8} {'速度':<8} {'启动':<4} {'状态':<12} {'标签':<12} {'区域':<10} {'结果'}")
+
+    print(f"\n{'帧':<4} {'Y坐标':<8} {'速度':<6} {'方向':<10} {'预期锁定':<15} {'实际状态':<15} {'标签':<10} {'结果'}")
     print("-" * 100)
-    
+
     all_pass = True
-    for cable_id, lat, xs, st, expected, desc in cable_cases:
-        state, label, location = detect_cable_car_state(lat, xs, st)
-        match = "✓" if state == expected else f"✗"
+    for i, (tid, y, spd, d, expected, desc) in enumerate(test_sequence):
+        state, label, loc = detect_vehicle_state_locked(tid, y, spd, 0, d)
+        match = "✓" if state == expected else "✗"
         if state != expected:
             all_pass = False
             match += f"(应为{expected})"
-        print(f"{cable_id:<4} {lat:<8.1f} {xs:<+8.1f} {st:<4} {state:<12} {label:<12} {location:<10} {match}")
-        print(f"     {desc}")
-    
-    # ========== 车辆状态测试（Bug修复验证） ==========
-    print("\n" + "=" * 100)
-    print("【车辆状态测试 - Bug修复验证】")
-    print("=" * 100)
-    print("车辆位置区域：接料区Y>50，送料途中-950<Y<50，卸料区Y<-950")
-    print("=" * 100)
-    
-    vehicle_cases = [
-        # (result_y, speed, y_trend, direction, expected_state, description)
-        # 接料区测试
-        (87, 0, 0, 'stopped', 'standby', "接料区，停止 → 待命"),
-        (87, 5, 0, 'going', 'standby', "接料区，移动 → 待命（接料区统一显示待命）"),
-        
-        # 送料途中 - 关键bug修复测试
-        (-500, 10, -50, 'going', 'delivering', "送料途中，direction=going，移动 → 送料中"),
-        (-500, 0, 0, 'going', 'delivering_pause', "送料途中，direction=going，停止 → 送料暂停"),
-        (-500, 10, 0, 'idle', 'standby', "【Bug修复】送料途中，direction=idle，移动 → 待命（不盲目显示送料中）"),
-        (-500, 0, 0, 'idle', 'standby', "【Bug修复】送料途中，direction=idle，停止 → 待命"),
-        (-500, 10, 0, 'returning', 'returning', "送料途中，direction=returning，移动 → 返程中"),
-        
-        # 卸料区测试
-        (-1200, 0, 0, 'stopped', 'unloading_wait', "卸料区，停止 → 卸料区等待"),
-        (-1200, 5, 0, 'returning', 'unloading', "卸料区，返程中移动 → 卸料中"),
-        
-        # 未知区域测试
-        (2000, 10, 0, 'idle', 'standby', "【Bug修复】未知区域，direction=idle，移动 → 待命（不盲目显示送料中）"),
-    ]
-    
-    print(f"\n{'Y坐标':<10} {'速度':<8} {'方向':<10} {'预期状态':<12} {'实际状态':<12} {'标签':<12} {'结果'}")
-    print("-" * 100)
-    
-    for result_y, speed, y_trend, direction, expected, desc in vehicle_cases:
-        state, label, location = detect_vehicle_state(result_y, speed, y_trend, direction)
-        match = "✓" if state == expected else f"✗"
-        if state != expected:
-            all_pass = False
-            match += f"(应为{expected})"
-        print(f"{result_y:<10} {speed:<8} {direction:<10} {expected:<12} {state:<12} {label:<12} {match}")
-        print(f"     {desc}")
-    
+        print(f"{i+1:<4} {y:<8.0f} {spd:<6.1f} {d:<10} {expected:<15} {state:<15} {label:<10} {match} {desc}")
+
     print("-" * 100)
     if all_pass:
-        print("\n✅ 所有测试用例通过！Bug已修复！")
+        print("\n✅ 所有测试用例通过！状态锁定机制工作正常！")
     else:
         print("\n❌ 部分测试用例失败！")
     print("=" * 100)

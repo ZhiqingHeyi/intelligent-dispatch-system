@@ -1,7 +1,7 @@
 import sqlite3
 import json
 from datetime import datetime
-from database import get_db
+from config import DB_PATH
 
 GRADE_NAMES = {
     1: '二级配',
@@ -21,6 +21,12 @@ CONFIG_TYPE_MAP = {
     'auto_dispatch_enabled': bool,
     'dispatch_interval': int,
 }
+
+
+def _get_db():
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 def _coerce_config_value(key, value):
@@ -48,7 +54,7 @@ def _coerce_config_value(key, value):
 
 
 def init_ai_tables():
-    conn = get_db()
+    conn = _get_db()
     c = conn.cursor()
 
     c.execute('''CREATE TABLE IF NOT EXISTS ai_config (
@@ -108,7 +114,7 @@ def init_ai_tables():
 
 
 def get_ai_config():
-    conn = get_db()
+    conn = _get_db()
     rows = conn.execute('SELECT key, value FROM ai_config').fetchall()
     conn.close()
     config = {}
@@ -121,7 +127,7 @@ def get_ai_config():
 
 
 def set_ai_config(key, value):
-    conn = get_db()
+    conn = _get_db()
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     coerced = _coerce_config_value(key, value)
     if isinstance(coerced, str):
@@ -147,7 +153,7 @@ def get_all_ai_config():
 
 
 def save_all_ai_config(config_dict):
-    conn = get_db()
+    conn = _get_db()
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     try:
         for key, value in config_dict.items():
@@ -243,7 +249,7 @@ def test_ai_connection(api_url, api_key, model):
 
 
 def save_chat_message(role, content, tool_calls=None, tool_result=None):
-    conn = get_db()
+    conn = _get_db()
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     conn.execute(
         'INSERT INTO ai_chat_history (role, content, tool_calls, tool_result, created_at) VALUES (?, ?, ?, ?, ?)',
@@ -257,7 +263,7 @@ def save_chat_message(role, content, tool_calls=None, tool_result=None):
 
 
 def get_chat_history(limit=50):
-    conn = get_db()
+    conn = _get_db()
     rows = conn.execute(
         'SELECT * FROM ai_chat_history ORDER BY id DESC LIMIT ?',
         (limit,)
@@ -280,7 +286,7 @@ def get_chat_history(limit=50):
 
 
 def clear_chat_history():
-    conn = get_db()
+    conn = _get_db()
     conn.execute('DELETE FROM ai_chat_history')
     conn.commit()
     conn.close()
@@ -289,7 +295,7 @@ def clear_chat_history():
 def save_experience(cable_car_id, vehicle_id, grade_id, ai_reasoning,
                     cable_car_state='', vehicle_state='',
                     cable_car_latitude=0, vehicle_result_y=0):
-    conn = get_db()
+    conn = _get_db()
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     grade_name = GRADE_NAMES.get(grade_id, f'级配{grade_id}')
     conn.execute(
@@ -307,7 +313,7 @@ def save_experience(cable_car_id, vehicle_id, grade_id, ai_reasoning,
 
 
 def update_experience_outcome(exp_id, outcome, detail='', operator_override=False, override_reason=''):
-    conn = get_db()
+    conn = _get_db()
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     conn.execute(
         '''UPDATE ai_experience
@@ -320,7 +326,7 @@ def update_experience_outcome(exp_id, outcome, detail='', operator_override=Fals
 
 
 def get_experience(grade_id=None, outcome='all', limit=10):
-    conn = get_db()
+    conn = _get_db()
     query = 'SELECT * FROM ai_experience WHERE 1=1'
     params = []
     if grade_id:
@@ -337,7 +343,7 @@ def get_experience(grade_id=None, outcome='all', limit=10):
 
 
 def get_experience_summary():
-    conn = get_db()
+    conn = _get_db()
     total = conn.execute('SELECT COUNT(*) as cnt FROM ai_experience').fetchone()['cnt']
     success = conn.execute("SELECT COUNT(*) as cnt FROM ai_experience WHERE outcome='success'").fetchone()['cnt']
     failure = conn.execute("SELECT COUNT(*) as cnt FROM ai_experience WHERE outcome='failure'").fetchone()['cnt']
@@ -355,7 +361,7 @@ def get_experience_summary():
 
 
 def save_dispatch_log(task_id, cable_car_id, vehicle_id, grade_id, action, reasoning='', source='ai'):
-    conn = get_db()
+    conn = _get_db()
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     conn.execute(
         '''INSERT INTO ai_dispatch_log
@@ -368,7 +374,7 @@ def save_dispatch_log(task_id, cable_car_id, vehicle_id, grade_id, action, reaso
 
 
 def get_schedule_config():
-    conn = get_db()
+    conn = _get_db()
     rows = conn.execute('SELECT key, value FROM ai_schedule_config').fetchall()
     conn.close()
     config = {}
@@ -381,7 +387,7 @@ def get_schedule_config():
 
 
 def set_schedule_config(key, value):
-    conn = get_db()
+    conn = _get_db()
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     conn.execute(
         'INSERT OR REPLACE INTO ai_schedule_config (key, value, updated_at) VALUES (?, ?, ?)',

@@ -51,6 +51,7 @@ export interface Task {
   vehicle_id: number
   grade_id: number
   status: 'assigned' | 'pending' | 'completed' | 'cancelled'
+  car_confirmed: number
   created_at: string
   completed_at: string
   cable_car_name: string

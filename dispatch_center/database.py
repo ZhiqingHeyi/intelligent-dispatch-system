@@ -1,14 +1,44 @@
 import sqlite3
 import json
+import time
+import threading
 from config import DB_PATH, CONCRETE_GRADES
 
+_local = threading.local()
+
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if not hasattr(_local, 'conn') or _local.conn is None:
+        _local.conn = sqlite3.connect(DB_PATH, timeout=10, check_same_thread=False)
+        _local.conn.row_factory = sqlite3.Row
+        _local.conn.execute('PRAGMA journal_mode=WAL')
+        _local.conn.execute('PRAGMA busy_timeout=5000')
+        _local.conn.execute('PRAGMA synchronous=NORMAL')
+    return _local.conn
+
+def close_db():
+    if hasattr(_local, 'conn') and _local.conn:
+        try:
+            _local.conn.close()
+        except:
+            pass
+        _local.conn = None
+
+def get_db_with_retry(max_retries=3, delay=0.1):
+    for i in range(max_retries):
+        try:
+            conn = get_db()
+            conn.execute('BEGIN IMMEDIATE')
+            return conn
+        except sqlite3.OperationalError as e:
+            if 'locked' in str(e) and i < max_retries - 1:
+                time.sleep(delay * (i + 1))
+            else:
+                raise
+    return get_db()
 
 def init_db():
-    conn = get_db()
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
     c.execute('''CREATE TABLE IF NOT EXISTS cable_cars (
@@ -75,6 +105,7 @@ def init_db():
         vehicle_id INTEGER NOT NULL,
         grade_id INTEGER NOT NULL,
         status TEXT DEFAULT 'pending',
+        car_confirmed INTEGER DEFAULT 0,
         created_at TEXT NOT NULL,
         assigned_at TEXT,
         completed_at TEXT,
@@ -83,6 +114,11 @@ def init_db():
         FOREIGN KEY (cable_car_id) REFERENCES cable_cars(id),
         FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
     )''')
+
+    try:
+        c.execute('ALTER TABLE dispatch_tasks ADD COLUMN car_confirmed INTEGER DEFAULT 0')
+    except:
+        pass
 
     c.execute('''CREATE TABLE IF NOT EXISTS grade_config (
         id INTEGER PRIMARY KEY,
@@ -154,9 +190,9 @@ def complete_dispatch_task(task_id):
     if task:
         conn.execute('UPDATE dispatch_tasks SET status = ?, completed_at = ? WHERE id = ?',
                       ('completed', now, task_id))
-        conn.execute('UPDATE cable_cars SET status = ?, grade_id = 0 WHERE id = ?',
+        conn.execute('UPDATE cable_cars SET status = ? WHERE id = ?',
                       ('idle', task['cable_car_id']))
-        conn.execute('UPDATE vehicles SET status = ?, grade_id = 0 WHERE id = ?',
+        conn.execute('UPDATE vehicles SET status = ? WHERE id = ?',
                       ('idle', task['vehicle_id']))
     conn.commit()
     conn.close()
@@ -169,9 +205,9 @@ def cancel_dispatch_task(task_id):
     if task:
         conn.execute('UPDATE dispatch_tasks SET status = ?, cancelled_at = ? WHERE id = ?',
                       ('cancelled', now, task_id))
-        conn.execute('UPDATE cable_cars SET status = ?, grade_id = 0 WHERE id = ?',
+        conn.execute('UPDATE cable_cars SET status = ? WHERE id = ?',
                       ('idle', task['cable_car_id']))
-        conn.execute('UPDATE vehicles SET status = ?, grade_id = 0 WHERE id = ?',
+        conn.execute('UPDATE vehicles SET status = ? WHERE id = ?',
                       ('idle', task['vehicle_id']))
     conn.commit()
     conn.close()

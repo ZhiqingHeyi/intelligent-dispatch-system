@@ -1,8 +1,11 @@
 import axios from 'axios'
 import type { StatusResponse, AiConfig, AiChatResponse, AiSchedulerStatus } from '@/types'
 
+// 生产环境使用完整URL，开发环境使用相对路径
+const baseURL = import.meta.env.VITE_API_BASE_URL || '/api'
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: baseURL,
   headers: {
     'Content-Type': 'application/json',
   },

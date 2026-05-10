@@ -1,6 +1,8 @@
 import json
 import os
-from flask import Flask, render_template, jsonify, request, send_from_directory
+import threading
+from flask import Flask, render_template, jsonify, request, send_from_directory, make_response
+from werkzeug.serving import make_server
 from database import init_db, get_db, update_cable_car_grade, update_cable_car_state, update_vehicle_grade, create_dispatch_task, complete_dispatch_task, cancel_dispatch_task
 from data_sync import sync_all, start_sync_loop, stop_sync_loop
 from config import CONCRETE_GRADES
@@ -9,6 +11,13 @@ app = Flask(__name__,
             static_folder='static',
             template_folder='templates')
 app.debug = True
+
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
 
 VUE_DIST_DIR = os.path.join(app.static_folder, 'vue-dist')
 VUE_ASSETS_DIR = os.path.join(VUE_DIST_DIR, 'assets')
@@ -32,6 +41,10 @@ init_db()
 def index():
     js_file, css_file = _get_vue_assets()
     return render_template('index.html', js_file=js_file, css_file=css_file)
+
+@app.route('/driver')
+def driver_display():
+    return render_template('driver_display.html')
 
 @app.route('/static/vue-dist/assets/<path:filename>')
 def vue_assets(filename):
@@ -144,6 +157,11 @@ def dispatch():
 
 @app.route('/api/dispatch/<int:task_id>/complete', methods=['PUT'])
 def complete_task(task_id):
+    complete_dispatch_task(task_id)
+    return jsonify({'success': True})
+
+@app.route('/api/task/<int:task_id>/complete', methods=['POST'])
+def complete_task_v2(task_id):
     complete_dispatch_task(task_id)
     return jsonify({'success': True})
 
@@ -382,7 +400,33 @@ def update_experience_outcome(exp_id):
 if __name__ == '__main__':
     init_db()
     start_sync_loop()
+    
+    def run_server(port):
+        server = make_server('0.0.0.0', port, app, threaded=True)
+        print(f'[*] 服务器启动在端口 {port}')
+        server.serve_forever()
+    
     try:
-        app.run(host='0.0.0.0', port=5001, debug=False, threaded=True)
+        # 主服务：9045端口 - 调度员界面
+        # 副服务：9046端口 - 司机大屏幕界面
+        t1 = threading.Thread(target=run_server, args=(9045,), daemon=True)
+        t2 = threading.Thread(target=run_server, args=(9046,), daemon=True)
+        
+        t1.start()
+        t2.start()
+        
+        print('=' * 60)
+        print('🚛 智能卸料动态匹配系统')
+        print('=' * 60)
+        print(f'✓ 调度员界面: http://0.0.0.0:9045/')
+        print(f'✓ 司机大屏幕: http://0.0.0.0:9046/driver')
+        print('=' * 60)
+        
+        # 保持主线程运行
+        while True:
+            threading.Event().wait(1)
+            
+    except KeyboardInterrupt:
+        print('\n[*] 正在关闭服务器...')
     finally:
         stop_sync_loop()

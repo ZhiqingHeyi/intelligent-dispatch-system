@@ -2,6 +2,7 @@
   <div class="match-center-content">
     <div class="mc-title">智能匹配状态</div>
 
+    <!-- 当前匹配中 -->
     <div v-if="assignedTasks.length > 0" class="mc-section">
       <div class="mc-section-title">
         <span class="mc-dot green"></span>当前匹配中
@@ -34,48 +35,97 @@
               <span class="mc-entity-name">{{ task.vehicle_name }}</span>
             </div>
           </div>
-          <div class="mc-match-status">车辆送料中，等待返程自动完成...</div>
+          <div class="mc-match-status">
+            缆机送料或车辆返程后自动完成
+          </div>
         </div>
       </div>
     </div>
 
-    <div v-if="waitingCars.length > 0" class="mc-section">
+    <!-- 双向匹配等待区 -->
+    <div v-if="waitingCars.length > 0 || waitingVehicles.length > 0" class="mc-section">
       <div class="mc-section-title">
-        <span class="mc-dot yellow"></span>等待匹配车辆
+        <span class="mc-dot yellow"></span>等待匹配
       </div>
-      <div class="mc-grid" :class="gridClass(waitingCars.length)">
-        <div
-          v-for="car in waitingCars"
-          :key="car.id"
-          class="mc-match-card waiting"
-        >
-          <div class="mc-match-row">
-            <div class="mc-entity">
-              <span class="mc-entity-icon car-icon">{{ car.id }}</span>
-              <span class="mc-entity-name">{{ car.name }}</span>
-            </div>
-            <div class="mc-match-info">
-              <span
-                v-if="getCarGrade(car)"
-                class="mc-grade-tag"
-                :style="{
-                  background: getCarGrade(car)!.color + '18',
-                  color: getCarGrade(car)!.color,
-                  border: '1px solid ' + getCarGrade(car)!.color + '44'
-                }"
-              >
-                {{ getCarGrade(car)!.name }}
-              </span>
-              <span class="mc-wait-text">等待同级配车辆送料</span>
+      <div class="mc-bidirectional">
+        <!-- 左列：缆机等车 -->
+        <div class="mc-bd-column" v-if="waitingCars.length > 0">
+          <div class="mc-bd-header">
+            <span class="mc-bd-header-icon">🏗️</span>
+            <span>缆机等车</span>
+          </div>
+          <div class="mc-bd-list">
+            <div
+              v-for="car in waitingCars"
+              :key="'car-' + car.id"
+              class="mc-bd-item car-waiting"
+            >
+              <div class="mc-bd-item-top">
+                <span class="mc-bd-item-id">{{ car.id }}号</span>
+                <span
+                  v-if="getCarGrade(car)"
+                  class="mc-grade-tag"
+                  :style="{
+                    background: getCarGrade(car)!.color + '18',
+                    color: getCarGrade(car)!.color,
+                    border: '1px solid ' + getCarGrade(car)!.color + '44'
+                  }"
+                >
+                  {{ getCarGrade(car)!.name }}
+                </span>
+              </div>
+              <div class="mc-bd-item-sub">
+                可匹配车辆: {{ getMatchingVehiclesForCar(car).length > 0 ? getMatchingVehiclesForCar(car).map(v => v.name).join(', ') : '暂无' }}
+              </div>
             </div>
           </div>
-          <div class="mc-match-sub">
-            匹配车辆: {{ getMatchingVehicles(car).length > 0 ? getMatchingVehicles(car).map(v => v.name).join(', ') : '暂无' }}
+        </div>
+
+        <!-- 中间连接线 -->
+        <div class="mc-bd-connector" v-if="waitingCars.length > 0 && waitingVehicles.length > 0">
+          <div class="mc-bd-line"></div>
+          <div class="mc-bd-arrows">
+            <span class="mc-bd-arrow-left">◀</span>
+            <span class="mc-bd-arrow-right">▶</span>
+          </div>
+        </div>
+
+        <!-- 右列：车辆等缆机 -->
+        <div class="mc-bd-column" v-if="waitingVehicles.length > 0">
+          <div class="mc-bd-header">
+            <span class="mc-bd-header-icon">🚛</span>
+            <span>车辆等缆机</span>
+          </div>
+          <div class="mc-bd-list">
+            <div
+              v-for="v in waitingVehicles"
+              :key="'v-' + v.id"
+              class="mc-bd-item vehicle-waiting"
+            >
+              <div class="mc-bd-item-top">
+                <span class="mc-bd-item-id">{{ v.name }}</span>
+                <span
+                  v-if="getVehicleGrade(v)"
+                  class="mc-grade-tag"
+                  :style="{
+                    background: getVehicleGrade(v)!.color + '18',
+                    color: getVehicleGrade(v)!.color,
+                    border: '1px solid ' + getVehicleGrade(v)!.color + '44'
+                  }"
+                >
+                  {{ getVehicleGrade(v)!.name }}
+                </span>
+              </div>
+              <div class="mc-bd-item-sub">
+                可匹配缆机: {{ getMatchingCarsForVehicle(v).length > 0 ? getMatchingCarsForVehicle(v).map(c => c.name).join(', ') : '暂无' }}
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- 待设置级配的缆机 -->
     <div v-if="ungradedCars.length > 0" class="mc-section">
       <div class="mc-section-title">
         <span class="mc-dot gray"></span>待设置级配
@@ -92,20 +142,21 @@
               <span class="mc-entity-name">{{ car.name }}</span>
             </div>
             <div class="mc-match-info">
-              <span class="mc-wait-text">返程中，请设置级配</span>
+              <span class="mc-wait-text">已到装料区，请设置级配</span>
             </div>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- 空状态 -->
     <div
-      v-if="assignedTasks.length === 0 && waitingCars.length === 0 && ungradedCars.length === 0"
+      v-if="assignedTasks.length === 0 && waitingCars.length === 0 && waitingVehicles.length === 0 && ungradedCars.length === 0"
       class="mc-empty"
     >
       <div class="mc-empty-icon">📡</div>
       <p>系统正在实时监测中</p>
-      <p class="mc-empty-sub">识别到缆机返程且设置级配后，将自动匹配送料车辆</p>
+      <p class="mc-empty-sub">识别到缆机接料或车辆送料后，将自动匹配</p>
     </div>
   </div>
 </template>
@@ -113,7 +164,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useDispatchStore } from '@/stores/dispatch'
-import type { CableCar } from '@/types'
+import type { CableCar, Vehicle } from '@/types'
 
 const store = useDispatchStore()
 
@@ -121,16 +172,31 @@ const assignedTasks = computed(() =>
   store.activeTasks.filter(t => t.status === 'assigned')
 )
 
-const returningCars = computed(() =>
-  store.cableCars.filter(c => c.direction === 'returning' && c.status === 'returning')
-)
-
+// 缆机等待区：在装料区接料中 + 有级配 + 未被分配
 const waitingCars = computed(() =>
-  returningCars.value.filter(c => c.grade_id > 0)
+  store.cableCars.filter(c =>
+    c.state === 'loading' &&
+    c.grade_id > 0 &&
+    c.status !== 'assigned'
+  )
 )
 
+// 车辆等待区：送料途中(going) + 有级配 + 未被分配
+const waitingVehicles = computed(() =>
+  store.vehicles.filter(v =>
+    v.direction === 'going' &&
+    v.grade_id > 0 &&
+    v.status !== 'assigned'
+  )
+)
+
+// 未设置级配的缆机：在装料区但没有级配
 const ungradedCars = computed(() =>
-  returningCars.value.filter(c => !c.grade_id || c.grade_id === 0)
+  store.cableCars.filter(c =>
+    c.state === 'loading' &&
+    (!c.grade_id || c.grade_id === 0) &&
+    c.status !== 'assigned'
+  )
 )
 
 const gridClass = (count: number) => {
@@ -142,9 +208,21 @@ const getCarGrade = (car: CableCar) => {
   return store.grades.find(g => g.id === car.grade_id)
 }
 
-const getMatchingVehicles = (car: CableCar) => {
+const getVehicleGrade = (vehicle: Vehicle) => {
+  return store.grades.find(g => g.id === vehicle.grade_id)
+}
+
+// 缆机可匹配的车辆
+const getMatchingVehiclesForCar = (car: CableCar) => {
   return store.vehicles.filter(
     v => v.grade_id === car.grade_id && v.status !== 'assigned' && v.direction === 'going'
+  )
+}
+
+// 车辆可匹配的缆机
+const getMatchingCarsForVehicle = (vehicle: Vehicle) => {
+  return store.cableCars.filter(
+    c => c.grade_id === vehicle.grade_id && c.status !== 'assigned' && c.state === 'loading'
   )
 }
 </script>
@@ -167,13 +245,6 @@ const getMatchingVehicles = (car: CableCar) => {
   text-align: center;
   margin-bottom: clamp(10px, 1.2vh, 14px);
   letter-spacing: clamp(2px, 0.3vw, 3px);
-}
-
-@media screen and (max-width: 1200px) {
-  .mc-title {
-    font-size: 13px;
-    margin-bottom: 10px;
-  }
 }
 
 .mc-section {
@@ -231,12 +302,6 @@ const getMatchingVehicles = (car: CableCar) => {
   transition: all 0.2s ease;
 }
 
-@media screen and (max-width: 1200px) {
-  .mc-match-card {
-    padding: 12px 16px;
-  }
-}
-
 .mc-match-card:hover {
   background: var(--match-card-hover-bg);
   transform: translateY(-1px);
@@ -244,10 +309,6 @@ const getMatchingVehicles = (car: CableCar) => {
 
 .mc-match-card.matched {
   border-left: 3px solid var(--accent-green);
-}
-
-.mc-match-card.waiting {
-  border-left: 3px solid var(--accent-yellow);
 }
 
 .mc-match-card.ungraded {
@@ -364,11 +425,110 @@ const getMatchingVehicles = (car: CableCar) => {
   opacity: 0.8;
 }
 
-.mc-match-sub {
-  margin-top: 8px;
-  font-size: 12px;
+/* 双向匹配区域 */
+.mc-bidirectional {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.mc-bd-column {
+  flex: 1;
+  min-width: 0;
+}
+
+.mc-bd-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  font-weight: 500;
+  justify-content: center;
+}
+
+.mc-bd-header-icon {
+  font-size: 14px;
+}
+
+.mc-bd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mc-bd-item {
+  background: var(--match-card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 12px;
+  transition: all 0.2s ease;
+}
+
+.mc-bd-item:hover {
+  background: var(--match-card-hover-bg);
+}
+
+.mc-bd-item.car-waiting {
+  border-left: 3px solid var(--accent-yellow);
+}
+
+.mc-bd-item.vehicle-waiting {
+  border-left: 3px solid var(--accent-blue);
+}
+
+.mc-bd-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.mc-bd-item-id {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mc-bd-item-sub {
+  font-size: 11px;
   color: var(--text-muted);
-  text-align: center;
+}
+
+/* 中间连接器 */
+.mc-bd-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  gap: 4px;
+}
+
+.mc-bd-line {
+  width: 2px;
+  flex: 1;
+  background: linear-gradient(180deg, var(--accent-yellow), var(--accent-blue));
+  border-radius: 1px;
+  opacity: 0.5;
+}
+
+.mc-bd-arrows {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.mc-bd-arrow-left {
+  color: var(--accent-yellow);
+}
+
+.mc-bd-arrow-right {
+  color: var(--accent-blue);
 }
 
 .mc-empty {

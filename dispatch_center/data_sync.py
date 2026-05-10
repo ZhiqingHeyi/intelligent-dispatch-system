@@ -27,14 +27,18 @@
 """
 
 import pymysql
+import sqlite3
 import threading
 import time
 from collections import deque
 from datetime import datetime
-from config import CABLE_CAR_DB, VEHICLE_DB, SYNC_INTERVAL, VEHICLE_GOING_THRESHOLD
+from config import CABLE_CAR_DB, VEHICLE_DB, SYNC_INTERVAL, VEHICLE_GOING_THRESHOLD, DB_PATH
 from database import get_db
 from state_detector import (
-    detect_cable_car_state, detect_vehicle_state,
+    detect_cable_car_state,
+    detect_vehicle_state_locked,
+    force_unlock_vehicle_state,
+    get_vehicle_locked_state,
     LOADING_ZONE, UNLOADING_ZONE,
     VEHICLE_LOADING_ZONE, VEHICLE_UNLOADING_ZONE, VEHICLE_DELIVERING_ZONE,
     VEHICLE_Y_DELTA_THRESHOLD
@@ -54,6 +58,11 @@ _cable_car_prev_state = {}
 
 _cable_car_queue = []
 _vehicle_queue = []
+
+CABLE_CAR_COOLDOWN = 180
+VEHICLE_COOLDOWN = 300
+_cable_car_cooldown = {}
+_vehicle_cooldown = {}
 
 
 def _get_cable_car_conn():
@@ -75,7 +84,7 @@ def detect_cable_car_direction(xspeed, start):
 
 
 def detect_vehicle_direction(tid, result_y, speed):
-    """检测车辆行驶方向 - 增强版（滑动窗口趋势 + 方向确认机制）"""
+    """检测车辆行驶方向 - 配合状态锁定机制"""
     global _vehicle_y_history, _vehicle_prev_direction, _vehicle_direction_confirm
 
     if tid not in _vehicle_y_history:
@@ -84,16 +93,23 @@ def detect_vehicle_direction(tid, result_y, speed):
     history = _vehicle_y_history[tid]
     history.append(result_y)
 
+    # 获取当前锁定状态
+    locked_state = get_vehicle_locked_state(tid)
+
     if speed is None or float(speed) < 0.1:
-        # 车辆几乎停止，返回stopped而不是保留旧方向
-        # 避免车辆停止后仍显示之前的方向导致状态错误
+        # 车辆几乎停止
+        # 如果状态锁定在delivering/returning，保留方向信息（配合状态锁定）
+        # 只有在standby/unloading_wait等稳定状态下才清除方向
+        if locked_state in ('delivering', 'returning'):
+            prev_dir = _vehicle_prev_direction.get(tid, 'idle')
+            if prev_dir in ('going', 'returning'):
+                return prev_dir
+        # 其他状态：清除方向
         prev_dir = _vehicle_prev_direction.get(tid, 'idle')
         if prev_dir in ('going', 'returning'):
-            # 车辆之前移动但现在停止，清除历史方向
             _vehicle_prev_direction[tid] = 'idle'
-            # 同时清除确认计数
             for key in list(_vehicle_direction_confirm.keys()):
-                if key.startswith(f"{tid}_"):
+                if isinstance(key, str) and key.startswith(f"{tid}_"):
                     del _vehicle_direction_confirm[key]
         return 'stopped'
 
@@ -200,7 +216,46 @@ def _vehicle_queue_exit(vehicle_id, reason=''):
         print(f"[QUEUE-VEHICLE-OUT] 车辆{vehicle_id}出队({reason}), 队列长度={len(_vehicle_queue)}")
 
 
+def _is_cable_car_cooling(car_id):
+    if car_id not in _cable_car_cooldown:
+        return False
+    if datetime.now().timestamp() >= _cable_car_cooldown[car_id]:
+        del _cable_car_cooldown[car_id]
+        return False
+    return True
+
+
+def _is_vehicle_cooling(vehicle_id):
+    if vehicle_id not in _vehicle_cooldown:
+        return False
+    if datetime.now().timestamp() >= _vehicle_cooldown[vehicle_id]:
+        del _vehicle_cooldown[vehicle_id]
+        return False
+    return True
+
+
+def get_cable_car_cooldown_remaining(car_id):
+    if car_id not in _cable_car_cooldown:
+        return 0
+    remaining = int(_cable_car_cooldown[car_id] - datetime.now().timestamp())
+    if remaining <= 0:
+        del _cable_car_cooldown[car_id]
+        return 0
+    return remaining
+
+
+def get_vehicle_cooldown_remaining(vehicle_id):
+    if vehicle_id not in _vehicle_cooldown:
+        return 0
+    remaining = int(_vehicle_cooldown[vehicle_id] - datetime.now().timestamp())
+    if remaining <= 0:
+        del _vehicle_cooldown[vehicle_id]
+        return 0
+    return remaining
+
+
 def _try_complete_task_by_cable_car(car_id, local_db, now):
+    """缆机开始送料 → OR逻辑直接完成任务"""
     task = local_db.execute(
         '''SELECT t.id, t.vehicle_id, v.tid as vehicle_tid
            FROM dispatch_tasks t
@@ -211,21 +266,15 @@ def _try_complete_task_by_cable_car(car_id, local_db, now):
     ).fetchone()
 
     if task:
-        local_db.execute('UPDATE dispatch_tasks SET status = ?, completed_at = ? WHERE id = ?',
-                         ('completed', now, task['id']))
-        local_db.execute('UPDATE cable_cars SET status = ?, grade_id = 0 WHERE id = ?',
-                         ('idle', car_id))
-        local_db.execute('UPDATE vehicles SET status = ?, grade_id = 0 WHERE id = ?',
-                         ('idle', task['vehicle_id']))
-        _update_vehicle_unloading_port(task['vehicle_tid'], None, action='clear')
-        print(f"[COMPLETE-CABLE] 任务#{task['id']} 已自动完成 ({car_id}号缆机开始送料)")
+        _do_complete_task(task, local_db, now, '缆机送料')
         return True
     return False
 
 
 def _try_complete_task_by_vehicle(vehicle_id, local_db, now):
+    """车辆返程 → OR逻辑直接完成任务"""
     task = local_db.execute(
-        '''SELECT t.id, t.cable_car_id, v.tid as vehicle_tid
+        '''SELECT t.id, t.cable_car_id, t.vehicle_id, v.tid as vehicle_tid
            FROM dispatch_tasks t
            JOIN vehicles v ON t.vehicle_id = v.id
            WHERE t.vehicle_id = ? AND t.status = 'assigned'
@@ -234,16 +283,34 @@ def _try_complete_task_by_vehicle(vehicle_id, local_db, now):
     ).fetchone()
 
     if task:
-        local_db.execute('UPDATE dispatch_tasks SET status = ?, completed_at = ? WHERE id = ?',
-                         ('completed', now, task['id']))
-        local_db.execute('UPDATE cable_cars SET status = ?, grade_id = 0 WHERE id = ?',
-                         ('idle', task['cable_car_id']))
-        local_db.execute('UPDATE vehicles SET status = ?, grade_id = 0 WHERE id = ?',
-                         ('idle', vehicle_id))
-        _update_vehicle_unloading_port(task['vehicle_tid'], None, action='clear')
-        print(f"[COMPLETE-VEHICLE] 任务#{task['id']} 已自动完成 (车辆{vehicle_id}已返程)")
+        _do_complete_task(task, local_db, now, '车辆返程')
         return True
     return False
+
+
+def _do_complete_task(task, local_db, now, reason=''):
+    """执行任务完成操作 + 设置冷却时间"""
+    already = local_db.execute('SELECT status FROM dispatch_tasks WHERE id = ?', (task['id'],)).fetchone()
+    if already and already['status'] == 'completed':
+        return
+
+    local_db.execute('UPDATE dispatch_tasks SET status = ?, completed_at = ? WHERE id = ?',
+                     ('completed', now, task['id']))
+    local_db.execute('UPDATE cable_cars SET status = ? WHERE id = ?',
+                     ('idle', task['cable_car_id']))
+    local_db.execute('UPDATE vehicles SET status = ? WHERE id = ?',
+                     ('idle', task['vehicle_id']))
+    _cable_car_queue_exit(task['cable_car_id'], f'任务完成-{reason}')
+    _vehicle_queue_exit(task['vehicle_id'], f'任务完成-{reason}')
+    _update_vehicle_unloading_port(task['vehicle_tid'], None, action='clear')
+
+    now_ts = datetime.now().timestamp()
+    _cable_car_cooldown[task['cable_car_id']] = now_ts + CABLE_CAR_COOLDOWN
+    _vehicle_cooldown[task['vehicle_id']] = now_ts + VEHICLE_COOLDOWN
+
+    print(f"[COMPLETE] 任务#{task['id']} 已完成({reason}) | "
+          f"缆机{task['cable_car_id']}冷却{CABLE_CAR_COOLDOWN}s, "
+          f"车辆{task['vehicle_id']}冷却{VEHICLE_COOLDOWN}s")
 
 
 def sync_cable_cars():
@@ -262,7 +329,8 @@ def sync_cable_cars():
         cursor.close()
         conn.close()
 
-        local_db = get_db()
+        local_db = sqlite3.connect(DB_PATH, timeout=10)
+        local_db.row_factory = sqlite3.Row
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         for row in rows:
@@ -284,15 +352,29 @@ def sync_cable_cars():
             if prev_state and prev_state != state:
                 print(f"[STATE] {car_id}号缆机状态切换: {prev_state} → {state}")
 
+                # 缆机入队：仅在 returning → loading 切换时入队
+                # 这是唯一正确的入队时机，表示缆机刚回到装料区准备接料
                 if prev_state == 'returning' and state == 'loading':
-                    current = local_db.execute('SELECT grade_id FROM cable_cars WHERE id = ?', (car_id,)).fetchone()
-                    grade_id = current['grade_id'] if current else 0
-                    _cable_car_queue_enter(car_id, grade_id, now)
+                    active_task = local_db.execute(
+                        'SELECT id FROM dispatch_tasks WHERE cable_car_id = ? AND status = ?',
+                        (car_id, 'assigned')
+                    ).fetchone()
+                    if active_task:
+                        print(f"[QUEUE-SKIP] {car_id}号缆机有未完成任务，跳过入队")
+                    elif _is_cable_car_cooling(car_id):
+                        remaining = int(_cable_car_cooldown[car_id] - datetime.now().timestamp())
+                        print(f"[QUEUE-COOLDOWN] {car_id}号缆机冷却中，剩余{remaining}s")
+                    else:
+                        current = local_db.execute('SELECT grade_id FROM cable_cars WHERE id = ?', (car_id,)).fetchone()
+                        grade_id = current['grade_id'] if current else 0
+                        _cable_car_queue_enter(car_id, grade_id, now)
 
+                # 缆机出队+确认：loading → delivering（缆机开始送料）
                 if prev_state == 'loading' and state == 'delivering':
                     _cable_car_queue_exit(car_id, '开始送料')
                     _try_complete_task_by_cable_car(car_id, local_db, now)
 
+                # 其他状态变化时，如果还在队列中则出队
                 if state not in ('loading',) and any(item['car_id'] == car_id for item in _cable_car_queue):
                     _cable_car_queue_exit(car_id, f'状态变为{state}')
 
@@ -344,7 +426,8 @@ def sync_vehicles():
         cursor.close()
         conn.close()
 
-        local_db = get_db()
+        local_db = sqlite3.connect(DB_PATH, timeout=10)
+        local_db.row_factory = sqlite3.Row
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         for row in rows:
@@ -362,7 +445,7 @@ def sync_vehicles():
             direction = detect_vehicle_direction(tid, result_y, speed)
 
             y_trend = _compute_vehicle_y_trend(tid)
-            v_state, v_state_label, v_location = detect_vehicle_state(result_y, speed, y_trend, direction)
+            v_state, v_state_label, v_location = detect_vehicle_state_locked(tid, result_y, speed, y_trend, direction)
 
             if prev_direction in ('going', 'idle') and direction == 'returning':
                 print(f"[VEHICLE-STATE] {tid}号车方向切换: {prev_direction} → returning")
@@ -396,11 +479,12 @@ def sync_vehicles():
                          updated_at, now, tid))
 
                     if direction == 'going' and grade_id > 0:
-                        # 基于实测数据校准的优先级判断
-                        # - 在卸料区(Y < -950)：at_platform（已在平台等待卸料）
-                        # - 在送料途中(-950 < Y < 50)：on_the_way
-                        at_platform = result_y <= VEHICLE_UNLOADING_ZONE[1]  # Y <= -950
-                        _vehicle_queue_enter(vehicle_id, tid, grade_id, now, at_platform=at_platform)
+                        if _is_vehicle_cooling(vehicle_id):
+                            remaining = int(_vehicle_cooldown[vehicle_id] - datetime.now().timestamp())
+                            print(f"[QUEUE-COOLDOWN] {tid}号车冷却中，剩余{remaining}s")
+                        else:
+                            at_platform = result_y <= VEHICLE_UNLOADING_ZONE[1]
+                            _vehicle_queue_enter(vehicle_id, tid, grade_id, now, at_platform=at_platform)
                     elif direction == 'returning':
                         _vehicle_queue_exit(vehicle_id, '已返程')
                     elif grade_id == 0:
@@ -530,7 +614,8 @@ def auto_match():
     global _cable_car_queue, _vehicle_queue
 
     try:
-        db = get_db()
+        db = sqlite3.connect(DB_PATH, timeout=10)
+        db.row_factory = sqlite3.Row
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         _cleanup_queues(db)
@@ -626,11 +711,13 @@ def _wait_seconds(enter_time_str):
 
 
 def auto_complete():
-    """自动完成任务 - 兜底机制（OR逻辑：缆机送料 或 车辆返程）"""
+    """自动完成任务 - OR逻辑（缆机送料 或 车辆返程，任一即完成）"""
     try:
-        db = get_db()
+        db = sqlite3.connect(DB_PATH, timeout=10)
+        db.row_factory = sqlite3.Row
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+        # 条件1：车辆返程 → 完成
         tasks_by_vehicle = [dict(r) for r in db.execute(
             '''SELECT t.id, t.cable_car_id, t.vehicle_id, v.tid as vehicle_tid
                FROM dispatch_tasks t
@@ -639,16 +726,9 @@ def auto_complete():
         ).fetchall()]
 
         for task in tasks_by_vehicle:
-            db.execute('UPDATE dispatch_tasks SET status = ?, completed_at = ? WHERE id = ?',
-                       ('completed', now, task['id']))
-            db.execute('UPDATE cable_cars SET status = ?, grade_id = 0 WHERE id = ?',
-                       ('idle', task['cable_car_id']))
-            db.execute('UPDATE vehicles SET status = ?, grade_id = 0 WHERE id = ?',
-                       ('idle', task['vehicle_id']))
-            _vehicle_queue_exit(task['vehicle_id'], '任务完成-车辆返程')
-            _update_vehicle_unloading_port(task['vehicle_tid'], None, action='clear')
-            print(f"[COMPLETE-FALLBACK-VEHICLE] 任务#{task['id']} 已自动完成 (车辆{task['vehicle_tid']}已返程)")
+            _do_complete_task(task, db, now, '车辆返程')
 
+        # 条件2：缆机送料 → 完成
         tasks_by_cable = [dict(r) for r in db.execute(
             '''SELECT t.id, t.cable_car_id, t.vehicle_id, v.tid as vehicle_tid
                FROM dispatch_tasks t
@@ -658,22 +738,12 @@ def auto_complete():
         ).fetchall()]
 
         for task in tasks_by_cable:
-            already_completed = db.execute(
+            already = db.execute(
                 'SELECT id FROM dispatch_tasks WHERE id = ? AND status = ?',
                 (task['id'], 'completed')
             ).fetchone()
-            if already_completed:
-                continue
-
-            db.execute('UPDATE dispatch_tasks SET status = ?, completed_at = ? WHERE id = ?',
-                       ('completed', now, task['id']))
-            db.execute('UPDATE cable_cars SET status = ?, grade_id = 0 WHERE id = ?',
-                       ('idle', task['cable_car_id']))
-            db.execute('UPDATE vehicles SET status = ?, grade_id = 0 WHERE id = ?',
-                       ('idle', task['vehicle_id']))
-            _cable_car_queue_exit(task['cable_car_id'], '任务完成-缆机送料')
-            _update_vehicle_unloading_port(task['vehicle_tid'], None, action='clear')
-            print(f"[COMPLETE-FALLBACK-CABLE] 任务#{task['id']} 已自动完成 (缆机{task['cable_car_id']}正在送料)")
+            if not already:
+                _do_complete_task(task, db, now, '缆机送料')
 
         db.commit()
         db.close()
