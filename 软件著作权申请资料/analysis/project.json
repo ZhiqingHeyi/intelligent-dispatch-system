@@ -1,0 +1,107 @@
+{
+  "project_root": "C:\\Users\\1\\Desktop\\智能建造实验室\\智能卸料动态匹配",
+  "project_name": "智能卸料动态匹配",
+  "software_name_candidate": "智能卸料动态匹配",
+  "package": {
+    "name": "",
+    "path": "",
+    "version": "V1.0",
+    "scripts": {},
+    "dependency_names": []
+  },
+  "frameworks": [
+    "Vue"
+  ],
+  "language": "Vue、TypeScript、JavaScript",
+  "source": {
+    "file_count": 34,
+    "line_count": 10065,
+    "extension_counts": {
+      ".css": 3,
+      ".html": 4,
+      ".js": 3,
+      ".ts": 7,
+      ".vue": 17
+    },
+    "category_counts": {
+      "api": 1,
+      "component": 16,
+      "entry": 2,
+      "source": 10,
+      "state": 2,
+      "style": 3
+    },
+    "categorized_files": {
+      "entry": [
+        "vue-frontend/src/App.vue",
+        "vue-frontend/src/main.ts"
+      ],
+      "component": [
+        "vue-frontend/src/components/AiAssistant.vue",
+        "vue-frontend/src/components/AiConfigModal.vue",
+        "vue-frontend/src/components/AppHeader.vue",
+        "vue-frontend/src/components/CableCarCard.vue",
+        "vue-frontend/src/components/CableCarPanel.vue",
+        "vue-frontend/src/components/DataMonitor.vue",
+        "vue-frontend/src/components/GradeModal.vue",
+        "vue-frontend/src/components/LoadingScreen.vue",
+        "vue-frontend/src/components/MatchCenter.vue",
+        "vue-frontend/src/components/MatchPanel.vue",
+        "vue-frontend/src/components/MonitorCard.vue",
+        "vue-frontend/src/components/StateModal.vue",
+        "vue-frontend/src/components/TaskList.vue",
+        "vue-frontend/src/components/Toast.vue",
+        "vue-frontend/src/components/VehicleCard.vue",
+        "vue-frontend/src/components/VehiclePanel.vue"
+      ],
+      "api": [
+        "vue-frontend/src/api/dispatch.ts"
+      ],
+      "state": [
+        "vue-frontend/src/stores/dispatch.ts",
+        "vue-frontend/src/stores/theme.ts"
+      ],
+      "style": [
+        "dispatch_center/static/css/driver-display.css",
+        "dispatch_center/static/css/style.css",
+        "dispatch_center/static/vue-dist/assets/index-t8TqLJkY.css"
+      ],
+      "source": [
+        "dispatch_center/static/js/app.js",
+        "dispatch_center/static/js/driver-display.js",
+        "dispatch_center/static/vue-dist/index.html",
+        "dispatch_center/static/vue-dist/assets/index-DXuAGusn.js",
+        "dispatch_center/templates/driver_display.html",
+        "dispatch_center/templates/index.html",
+        "vue-frontend/env.d.ts",
+        "vue-frontend/index.html",
+        "vue-frontend/vite.config.ts",
+        "vue-frontend/src/types/index.ts"
+      ]
+    }
+  },
+  "routes": [
+    "/"
+  ],
+  "readme_excerpt": "",
+  "run_command_candidates": [],
+  "feature_candidates": [
+    "dispatch",
+    "AiAssistant",
+    "AiConfigModal",
+    "AppHeader",
+    "CableCarCard",
+    "CableCarPanel",
+    "DataMonitor",
+    "GradeModal",
+    "LoadingScreen",
+    "MatchCenter",
+    "MatchPanel",
+    "MonitorCard",
+    "StateModal",
+    "TaskList",
+    "Toast",
+    "VehicleCard",
+    "VehiclePanel"
+  ]
+}

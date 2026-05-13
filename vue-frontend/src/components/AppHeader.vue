@@ -9,7 +9,7 @@
       </div>
       <div class="developer-badge">
         <span class="developer-icon">◆</span>
-        <span class="developer-text">葛洲坝二公司自主研发</span>
+        <span class="developer-text">葛洲坝二公司QBT项目部自主研发</span>
       </div>
     </div>
     

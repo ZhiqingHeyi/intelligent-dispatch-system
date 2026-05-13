@@ -1,0 +1,227 @@
+{
+  "software_name": "智能卸料动态匹配系统",
+  "business_understanding_required": true,
+  "source_documents": [
+    {
+      "path": "DEPLOY.md",
+      "size": 6825
+    },
+    {
+      "path": "direction_summary.md",
+      "size": 5225
+    },
+    {
+      "path": "requirements.txt",
+      "size": 59
+    },
+    {
+      "path": "前端使用说明.md",
+      "size": 1962
+    },
+    {
+      "path": "服务器部署与运维手册.md",
+      "size": 34936
+    },
+    {
+      "path": "端口服务异常排查手册.md",
+      "size": 11727
+    },
+    {
+      "path": "缆机实时数据库读取机制.md",
+      "size": 25721
+    },
+    {
+      "path": "缆机数据获取与状态判断-Agent专用版.md",
+      "size": 32824
+    },
+    {
+      "path": "车辆特征工程说明.md",
+      "size": 16244
+    },
+    {
+      "path": "部署问题复盘报告.md",
+      "size": 8954
+    },
+    {
+      "path": "SoftwareCopyright-Skill-main/README.md",
+      "size": 10423
+    }
+  ],
+  "project_evidence_file": "业务理解证据.md",
+  "product_positioning": "面向水利水电工程施工现场的缆机与运输车辆智能调度匹配平台，通过实时数据采集、状态识别和双队列优先级匹配算法，实现缆机卸料与混凝土运输车辆之间的动态调度，并集成AI大模型辅助调度决策与自动调度能力",
+  "industry": "水利水电工程建设",
+  "target_users": [
+    "水利水电工程施工现场调度员",
+    "缆机与运输车辆调度管理人员",
+    "施工项目部生产调度负责人"
+  ],
+  "core_value": "解决大坝混凝土施工中缆机与运输车辆之间人工调度效率低、级配匹配容易出错、车辆等待时间长的痛点，通过实时状态监测与自动匹配算法缩短调度响应时间，减少级配错配风险，提升混凝土输送效率",
+  "business_features": [
+    "缆机实时状态监测",
+    "运输车辆实时状态监测",
+    "混凝土级配管理",
+    "双队列FIFO优先级自动匹配",
+    "调度任务管理",
+    "AI智能调度助手",
+    "AI定时自动调度",
+    "调度经验学习与反馈",
+    "司机大屏显示"
+  ],
+  "business_feature_details": {
+    "缆机实时状态监测": "{'description': '系统从现场MySQL数据库实时读取4台缆机的位置、速度、运行状态等数据，通过位置区域和速度综合判断缆机当前处于接料、送料、卸料还是返程状态，在调度界面上以卡片形式展示每台缆机的编号、级配、状态标签和位置信息，调度员可手动设置缆机级配和特殊状态', 'evidence': 'dispatch_center/data_sync.py sync_cable_cars(), dispatch_center/state_detector.py detect_cable_car_state(), vue-frontend/src/components/CableCarPanel.vue, CableCarCard.vue'}",
+    "运输车辆实时状态监测": "{'description': '系统实时读取运输车辆的GPS位置、速度、方向等数据，通过Y坐标区域和方向趋势判断车辆处于待命、送料中、卸料中还是返程状态，采用状态锁定机制防止GPS信号波动导致状态频繁跳变，在界面上以卡片形式展示车辆编号、级配、当前位置区域和行驶方向', 'evidence': 'dispatch_center/data_sync.py sync_vehicles(), dispatch_center/state_detector.py detect_vehicle_state_locked(), vue-frontend/src/components/VehiclePanel.vue, VehicleCard.vue'}",
+    "混凝土级配管理": "{'description': '系统支持5种混凝土级配类型（二级配、三级配、四级配、三级配PVA纤维、三级富浆），调度员可为每台缆机和每辆车分别设置级配，级配信息以不同颜色标识，匹配时要求缆机与车辆的级配必须一致', 'evidence': 'dispatch_center/config.py CONCRETE_GRADES, vue-frontend/src/components/GradeModal.vue'}",
+    "双队列FIFO优先级自动匹配": "{'description': '系统维护缆机等待队列和车辆等待队列，缆机按入队时间FIFO排序，车辆按优先级（已到卸料区的车辆优先）加FIFO排序，当缆机回到装料区等待接料时自动入队，当车辆开始送料且已设置级配时自动入队，系统每3秒执行一次匹配，将级配一致的缆机与车辆自动配对并创建调度任务', 'evidence': 'dispatch_center/data_sync.py auto_match(), _cable_car_queue_enter(), _vehicle_queue_enter()'}",
+    "调度任务管理": "{'description': '系统记录每次调度匹配的任务信息，包括缆机、车辆、级配、创建时间和状态，任务状态包括已分配、已完成和已取消，当缆机开始送料或车辆开始返程时自动完成任务，调度员也可手动完成或取消任务，界面中间区域展示当前活跃任务和最近完成的任务', 'evidence': 'dispatch_center/database.py create_dispatch_task(), complete_dispatch_task(), vue-frontend/src/components/MatchPanel.vue, TaskList.vue'}",
+    "AI智能调度助手": "{'description': '系统集成大语言模型API，调度员可通过对话方式向AI助手询问当前调度态势、请求调度建议或执行智能调度，AI助手能读取实时缆机车辆状态、查询历史调度经验、按位置优先级和级配匹配规则推荐最优匹配方案，并通过工具调用直接创建调度任务', 'evidence': 'dispatch_center/ai_engine.py chat_with_ai(), vue-frontend/src/components/AiAssistant.vue'}",
+    "AI定时自动调度": "{'description': '系统支持启动AI定时调度器，按设定间隔（默认180秒）自动执行智能调度，AI分析当前所有缆机和车辆状态后自动创建匹配任务，调度器状态、调度次数和最近调度结果在界面上实时展示', 'evidence': 'dispatch_center/ai_scheduler.py start_ai_scheduler(), vue-frontend/src/components/AiAssistant.vue'}",
+    "调度经验学习与反馈": "{'description': '系统记录每次AI调度的决策理由和执行结果，调度员可对调度结果标记成功或失败，并填写修正原因，系统统计调度成功率、失败次数和被调度员修正的次数，供AI后续调度参考', 'evidence': 'dispatch_center/ai_experience.py save_experience(), update_experience_outcome(), get_experience_summary()'}",
+    "司机大屏显示": "{'description': '系统提供独立的司机大屏界面，在9046端口运行，以大字体展示当前调度任务和车辆分配信息，方便运输车辆司机在驾驶时快速查看调度安排', 'evidence': 'dispatch_center/app.py /driver路由, dispatch_center/templates/driver_display.html'}"
+  },
+  "operation_flow": [
+    "调度员打开系统主页，查看当前所有缆机和车辆的实时状态",
+    "为每台缆机和车辆设置对应的混凝土级配类型",
+    "系统自动将回到装料区的缆机和开始送料的车辆加入等待队列",
+    "系统按FIFO和优先级规则自动匹配级配一致的缆机与车辆，创建调度任务",
+    "调度员在匹配中心查看当前活跃任务，也可手动选择缆机和车辆创建任务",
+    "当缆机开始送料或车辆开始返程时，系统自动完成任务",
+    "调度员可打开AI助手面板，通过对话获取调度建议或执行智能调度",
+    "调度员可启动AI定时调度器，让系统按间隔自动执行智能匹配",
+    "调度员对AI调度结果进行反馈，标记成功或失败，帮助系统积累经验"
+  ],
+  "application_purpose": "用于QBT水利枢纽工程大坝混凝土施工中的缆机与运输车辆调度匹配，实现实时状态监测、自动匹配调度和AI辅助决策，提升混凝土输送效率和调度准确性",
+  "main_functions": "实时监测缆机与运输车辆运行状态；管理混凝土级配类型；基于双队列FIFO优先级算法自动匹配缆机与车辆；管理调度任务的创建、完成和取消；集成AI大模型提供智能调度建议和自动调度；记录调度经验并支持结果反馈；提供司机大屏显示调度信息",
+  "technical_characteristics": "采用双数据库架构实时同步缆机与车辆数据；基于位置区域和速度的缆机状态识别算法；基于Y坐标趋势和状态锁定机制的车辆状态识别算法；双队列FIFO加优先级的自动匹配调度算法；任务完成OR逻辑（缆机送料或车辆返程任一触发即完成）；集成大语言模型API实现AI辅助调度与工具调用；支持AI定时自动调度和经验学习反馈",
+  "software_technical_option": "应用软件",
+  "software_category": "应用软件",
+  "manual_sections": [
+    {
+      "title": "软件概述",
+      "intent": "介绍软件的定位、用途和适用场景，让审核员快速理解软件是什么、给谁用、解决什么问题",
+      "paragraphs": [
+        "智能卸料动态匹配系统是面向水利水电工程施工现场的缆机与运输车辆调度匹配平台。在大坝混凝土施工过程中，缆机从装料平台接取混凝土后运送到基坑卸料区卸料，运输车辆则从接料区装载混凝土运送到卸料区。本系统通过实时采集缆机和车辆的位置、速度等数据，自动识别设备运行状态，并根据混凝土级配要求和队列优先级规则，自动将等待中的缆机与合适的运输车辆进行匹配调度。",
+        "本系统适用于水利水电工程大坝混凝土施工场景，主要面向施工现场的调度员和调度管理人员。系统替代了传统的人工电话调度方式，减少了级配错配和车辆长时间等待的问题，提升了混凝土输送效率。"
+      ],
+      "include_feature_overview": false,
+      "include_operation_modules": false,
+      "include_operation_flow": false
+    },
+    {
+      "title": "运行环境",
+      "intent": "说明软件运行所需的硬件和软件环境",
+      "paragraphs": [
+        "本系统采用B/S架构，服务端运行在Linux服务器上，客户端通过浏览器访问。服务端需要Python 3运行环境、Flask Web框架、MySQL数据库（用于读取缆机和车辆的实时数据）以及SQLite本地数据库（用于存储调度业务数据）。客户端支持Chrome、Edge等主流浏览器。"
+      ],
+      "include_feature_overview": false,
+      "include_operation_modules": false,
+      "include_operation_flow": false
+    },
+    {
+      "title": "进入系统",
+      "intent": "说明如何打开和进入软件",
+      "paragraphs": [
+        "调度员在浏览器地址栏输入系统访问地址后，页面加载时会显示系统启动画面，随后进入主调度界面。主界面分为三个区域：左侧为缆机状态面板，中间为匹配调度中心，右侧为车辆状态面板。界面顶部显示系统标题、数据同步状态和主题切换按钮。"
+      ],
+      "include_feature_overview": false,
+      "include_operation_modules": false,
+      "include_operation_flow": false
+    },
+    {
+      "title": "缆机状态监测",
+      "intent": "说明缆机监测模块的用途、操作和反馈",
+      "paragraphs": [
+        "缆机状态面板位于界面左侧，以卡片形式展示每台缆机的实时信息。每张卡片显示缆机编号、当前级配类型（以颜色标识）、运行状态标签（如990平台接料、送料途中、基坑卸料、返程途中）和位置区域。系统每3秒自动从现场数据库同步缆机位置和速度数据，并根据位置区域与速度方向自动判断缆机状态。",
+        "调度员点击缆机卡片上的级配按钮，可在弹出的级配选择窗口中为该缆机设置混凝土级配类型，包括二级配、三级配、四级配、三级配PVA纤维和三级富浆五种。设置后级配信息以对应颜色显示在卡片上。调度员还可点击状态按钮，手动设置缆机的特殊状态（如检修、停用），设置后状态标签会相应变化。"
+      ],
+      "include_feature_overview": true,
+      "include_operation_modules": false,
+      "include_operation_flow": false
+    },
+    {
+      "title": "车辆状态监测",
+      "intent": "说明车辆监测模块的用途、操作和反馈",
+      "paragraphs": [
+        "车辆状态面板位于界面右侧，以卡片形式展示每台运输车辆的实时信息。每张卡片显示车辆编号、当前级配类型、运行状态标签（如待命、送料中、卸料中、返程中）和当前位置区域（接料区、送料途中、卸料区）。系统同样每3秒自动同步车辆GPS数据，并通过Y坐标区域和行驶方向趋势识别车辆状态。为防止GPS信号波动导致状态频繁跳变，系统采用状态锁定机制，只有连续多帧确认后才执行状态切换。",
+        "调度员点击车辆卡片上的级配按钮，可为该车辆设置混凝土级配类型，操作方式与缆机级配设置相同。只有设置了级配的车辆才会被纳入自动匹配队列。"
+      ],
+      "include_feature_overview": true,
+      "include_operation_modules": false,
+      "include_operation_flow": false
+    },
+    {
+      "title": "自动匹配调度",
+      "intent": "说明核心的自动匹配机制如何工作，调度员看到什么",
+      "paragraphs": [
+        "匹配调度中心位于界面中间区域，展示当前活跃的调度任务和最近完成的任务记录。系统在后台持续运行自动匹配算法：当缆机从返程状态回到装料区进入接料状态时，自动加入缆机等待队列；当车辆开始送料且已设置级配时，自动加入车辆等待队列。系统按先到先服务原则为缆机匹配级配一致的车辆，已到达卸料区的车辆优先匹配。",
+        "匹配成功后，系统自动创建调度任务，任务信息包括匹配的缆机编号、车辆编号、级配类型和创建时间，同时将匹配结果写入车辆调度数据库。活跃任务以卡片形式显示在匹配中心，调度员可查看任务详情。当缆机开始送料或车辆开始返程时，系统自动将任务标记为完成。"
+      ],
+      "include_feature_overview": true,
+      "include_operation_modules": false,
+      "include_operation_flow": true
+    },
+    {
+      "title": "手动调度操作",
+      "intent": "说明调度员如何手动创建、完成和取消任务",
+      "paragraphs": [
+        "除自动匹配外，调度员也可手动创建调度任务。在缆机面板中点击选择一台缆机，再在车辆面板中点击选择一台级配相同的车辆，然后在匹配中心点击创建任务按钮即可。系统会校验缆机与车辆的级配是否一致、双方是否已有进行中的任务，校验通过后创建调度任务。",
+        "对于已创建的任务，调度员可在任务卡片上点击完成按钮手动结束任务，或点击取消按钮取消任务。手动完成或取消后，对应的缆机和车辆恢复空闲状态，可参与下一次匹配。"
+      ],
+      "include_feature_overview": false,
+      "include_operation_modules": true,
+      "include_operation_flow": false
+    },
+    {
+      "title": "AI智能调度助手",
+      "intent": "说明AI助手的功能和使用方式",
+      "paragraphs": [
+        "系统右下角有一个AI助手按钮，点击后展开AI助手面板。调度员可在对话框中输入问题或指令，AI助手会读取当前所有缆机和车辆的实时状态，分析调度态势并给出建议。例如调度员可以询问'当前哪台缆机等待时间最长'或'建议为1号缆机匹配哪辆车'，AI助手会基于位置优先级和级配匹配规则给出推荐方案。",
+        "调度员点击AI助手面板中的智能调度按钮，AI会自动分析当前系统状态并执行调度匹配，将匹配结果以文字说明和工具调用结果的形式展示。调度员还可点击设置按钮配置AI模型的API地址、密钥和模型名称，配置完成后可测试连接是否正常。"
+      ],
+      "include_feature_overview": true,
+      "include_operation_modules": true,
+      "include_operation_flow": false
+    },
+    {
+      "title": "AI定时自动调度",
+      "intent": "说明定时调度功能的开启和监控",
+      "paragraphs": [
+        "在AI助手面板中，调度员可启动定时自动调度功能。启动后，系统按设定的时间间隔（默认3分钟）自动调用AI分析当前调度态势并执行匹配。面板上实时显示调度器的运行状态、已执行调度次数、最近调度时间和调度结果。调度员可随时停止定时调度。每次AI调度的决策理由和执行结果都会记录到调度经验库中。"
+      ],
+      "include_feature_overview": false,
+      "include_operation_modules": true,
+      "include_operation_flow": false
+    },
+    {
+      "title": "调度经验反馈",
+      "intent": "说明调度员如何对AI调度结果进行反馈",
+      "paragraphs": [
+        "系统记录每次AI调度的决策过程和执行结果。调度员可在经验记录中对调度结果标记为成功或失败，并填写失败原因或修正说明。如果调度员在实际操作中修改了AI的调度安排，系统会标记为调度员修正并记录修正原因。系统统计总调度次数、成功次数、失败次数和调度员修正次数，计算调度成功率，供AI在后续调度中参考改进。"
+      ],
+      "include_feature_overview": false,
+      "include_operation_modules": true,
+      "include_operation_flow": false
+    },
+    {
+      "title": "司机大屏显示",
+      "intent": "说明司机端大屏的用途",
+      "paragraphs": [
+        "系统提供独立的司机大屏界面，在独立端口运行。大屏以大字体展示当前分配给各车辆的调度任务信息，包括车辆编号、匹配的缆机编号和混凝土级配类型。运输车辆司机可在驾驶时快速查看自己的调度安排，无需操作调度系统。"
+      ],
+      "include_feature_overview": false,
+      "include_operation_modules": false,
+      "include_operation_flow": false
+    }
+  ],
+  "model_authored": true,
+  "external_research_notes": "",
+  "confirmation_required": true,
+  "user_confirmed": true,
+  "confirmation_stage": "business",
+  "next_action": "请确认 草稿/业务理解.md 中的软件用途、行业、目标用户、核心功能、手册结构和申请口径；确认后运行 confirm_stage.py --stage business。",
+  "review_notes": [
+    "请确认模型判断的行业领域、目标用户和主要功能是否符合实际申报口径。",
+    "请确认操作手册结构是否适合当前项目，而不是套用范本文档。"
+  ],
+  "confirmation_note": "用户确认业务理解准确：行业=水利水电工程建设，9大业务功能，11章操作手册结构",
+  "confirmed_at": "2026-05-12T01:48:04+00:00"
+}

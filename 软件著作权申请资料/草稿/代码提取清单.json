@@ -1,0 +1,141 @@
+{
+  "software_name": "面向缆机协同作业的智能卸料动态匹配调度系统",
+  "version": "V1.0",
+  "project_root": "C:\\Users\\1\\Desktop\\智能建造实验室\\智能卸料动态匹配",
+  "file_count": 13,
+  "material_line_count": 3826,
+  "source_line_count": 4177,
+  "selected_source_line_count": 3800,
+  "lines_per_page": 60,
+  "total_pages": 64,
+  "target_pages": 60,
+  "available_candidate_line_count": 16595,
+  "available_candidate_pages": 277,
+  "supplement_status": "候选源码可达到前30页/后30页要求",
+  "mode": "front30_back30",
+  "selection_file": "c:\\Users\\1\\Desktop\\智能建造实验室\\智能卸料动态匹配\\软件著作权申请资料\\草稿\\代码文件选择.json",
+  "outputs": [
+    "代码-前30页.md",
+    "代码-后30页.md"
+  ],
+  "files": [
+    {
+      "path": "dispatch_center/app.py",
+      "source_line_count": 432,
+      "selected_line_start": 1,
+      "selected_line_end": 432,
+      "selected_line_count": 432,
+      "material_line_start": 1,
+      "material_line_end": 434
+    },
+    {
+      "path": "dispatch_center/data_sync.py",
+      "source_line_count": 788,
+      "selected_line_start": 1,
+      "selected_line_end": 788,
+      "selected_line_count": 788,
+      "material_line_start": 435,
+      "material_line_end": 1224
+    },
+    {
+      "path": "dispatch_center/state_detector.py",
+      "source_line_count": 444,
+      "selected_line_start": 1,
+      "selected_line_end": 444,
+      "selected_line_count": 444,
+      "material_line_start": 1225,
+      "material_line_end": 1670
+    },
+    {
+      "path": "dispatch_center/ai_engine.py",
+      "source_line_count": 416,
+      "selected_line_start": 1,
+      "selected_line_end": 416,
+      "selected_line_count": 416,
+      "material_line_start": 1671,
+      "material_line_end": 2088
+    },
+    {
+      "path": "dispatch_center/ai_config.py",
+      "source_line_count": 212,
+      "selected_line_start": 1,
+      "selected_line_end": 212,
+      "selected_line_count": 212,
+      "material_line_start": 2089,
+      "material_line_end": 2302
+    },
+    {
+      "path": "dispatch_center/ai_experience.py",
+      "source_line_count": 397,
+      "selected_line_start": 1,
+      "selected_line_end": 397,
+      "selected_line_count": 397,
+      "material_line_start": 2303,
+      "material_line_end": 2701
+    },
+    {
+      "path": "dispatch_center/database.py",
+      "source_line_count": 213,
+      "selected_line_start": 1,
+      "selected_line_end": 213,
+      "selected_line_count": 213,
+      "material_line_start": 2702,
+      "material_line_end": 2916
+    },
+    {
+      "path": "dispatch_center/ai_scheduler.py",
+      "source_line_count": 93,
+      "selected_line_start": 1,
+      "selected_line_end": 93,
+      "selected_line_count": 93,
+      "material_line_start": 2917,
+      "material_line_end": 3011
+    },
+    {
+      "path": "dispatch_center/config.py",
+      "source_line_count": 35,
+      "selected_line_start": 1,
+      "selected_line_end": 35,
+      "selected_line_count": 35,
+      "material_line_start": 3012,
+      "material_line_end": 3048
+    },
+    {
+      "path": "vue-frontend/src/App.vue",
+      "source_line_count": 498,
+      "selected_line_start": 1,
+      "selected_line_end": 121,
+      "selected_line_count": 121,
+      "material_line_start": 3049,
+      "material_line_end": 3171
+    },
+    {
+      "path": "vue-frontend/src/stores/dispatch.ts",
+      "source_line_count": 403,
+      "selected_line_start": 1,
+      "selected_line_end": 403,
+      "selected_line_count": 403,
+      "material_line_start": 3172,
+      "material_line_end": 3576
+    },
+    {
+      "path": "vue-frontend/src/api/dispatch.ts",
+      "source_line_count": 94,
+      "selected_line_start": 1,
+      "selected_line_end": 94,
+      "selected_line_count": 94,
+      "material_line_start": 3577,
+      "material_line_end": 3672
+    },
+    {
+      "path": "vue-frontend/src/types/index.ts",
+      "source_line_count": 152,
+      "selected_line_start": 1,
+      "selected_line_end": 152,
+      "selected_line_count": 152,
+      "material_line_start": 3673,
+      "material_line_end": 3826
+    }
+  ],
+  "safe_software_filename": "面向缆机协同作业的智能卸料动态匹配调度系统"
+}

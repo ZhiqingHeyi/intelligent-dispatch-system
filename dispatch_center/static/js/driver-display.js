@@ -1,214 +1,146 @@
-/**
- * 司机专用大屏幕显示 - 数据逻辑
- * 功能：获取匹配数据、渲染卡片、自动刷新、时间更新
- */
-
 class DriverDisplay {
     constructor() {
         this.apiBaseUrl = window.location.origin;
-        this.refreshInterval = 2000; // 2秒刷新一次
+        this.refreshInterval = 2000;
         this.matchContainer = document.getElementById('matchContainer');
         this.loadingState = document.getElementById('loadingState');
         this.emptyState = document.getElementById('emptyState');
         this.currentTimeEl = document.getElementById('currentTime');
         this.updateInfoEl = document.getElementById('updateInfo');
-        
         this.init();
     }
 
     async init() {
-        console.log('[DriverDisplay] 初始化司机显示屏...');
-        
-        // 启动时钟
         this.startClock();
-        
-        // 首次加载数据
         await this.fetchData();
-        
-        // 设置定时刷新
-        setInterval(() => this fetchData(), this.refreshInterval);
-        
-        console.log('[DriverDisplay] 初始化完成');
+        setInterval(() => this.fetchData(), this.refreshInterval);
     }
 
-    /**
-     * 启动实时时钟
-     */
     startClock() {
-        const updateClock = () => {
-            const now = new Date();
-            const timeStr = now.toLocaleTimeString('zh-CN', { 
-                hour12: false,
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
-            if (this.currentTimeEl) {
-                this.currentTimeEl.textContent = timeStr;
+        var self = this;
+        var tick = function() {
+            var now = new Date();
+            var h = String(now.getHours()).padStart(2, '0');
+            var m = String(now.getMinutes()).padStart(2, '0');
+            var s = String(now.getSeconds()).padStart(2, '0');
+            if (self.currentTimeEl) {
+                self.currentTimeEl.textContent = h + ':' + m + ':' + s;
             }
         };
-        
-        updateClock();
-        setInterval(updateClock, 1000); // 每秒更新
+        tick();
+        setInterval(tick, 1000);
     }
 
-    /**
-     * 从API获取调度数据
-     */
     async fetchData() {
         try {
-            const response = await fetch(`${this.apiBaseUrl}/api/status`);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            var response = await fetch(this.apiBaseUrl + '/api/status');
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            var data = await response.json();
+
+            var activeTasks = [];
+            if (data.active_tasks) {
+                for (var i = 0; i < data.active_tasks.length; i++) {
+                    var t = data.active_tasks[i];
+                    if (t.status === 'assigned' || t.status === 'in_progress') {
+                        activeTasks.push(t);
+                    }
+                }
             }
-            
-            const data = await response.json();
-            console.log('[DriverDisplay] 获取数据成功:', data);
-            
-            // 过滤出当前正在进行的匹配任务（status === 'assigned'）
-            const activeTasks = data.active_tasks.filter(task => task.status === 'assigned');
-            
-            // 渲染匹配卡片
+
             this.renderMatches(activeTasks);
-            
-            // 更新状态信息
             this.updateStatusInfo(true);
-            
-        } catch (error) {
-            console.error('[DriverDisplay] 获取数据失败:', error);
+        } catch (err) {
+            console.error('[DriverDisplay] fetch error:', err);
             this.showError();
             this.updateStatusInfo(false);
         }
     }
 
-    /**
-     * 渲染匹配卡片列表
-     * @param {Array} tasks - 活跃的任务列表
-     */
     renderMatches(tasks) {
-        // 隐藏加载状态
-        if (this.loadingState) {
-            this.loadingState.style.display = 'none';
-        }
+        if (this.loadingState) this.loadingState.style.display = 'none';
 
-        // 清空容器（保留loadingState元素）
-        const existingCards = this.matchContainer.querySelectorAll('.match-card');
-        existingCards.forEach(card => card.remove());
+        var old = this.matchContainer.querySelectorAll('.match-card');
+        for (var i = 0; i < old.length; i++) old[i].remove();
 
-        // 如果没有活跃任务，显示空状态
-        if (tasks.length === 0) {
-            if (this.emptyState) {
-                this.emptyState.style.display = 'block';
-            }
+        if (!tasks || tasks.length === 0) {
+            if (this.emptyState) this.emptyState.style.display = 'block';
             return;
         }
 
-        // 隐藏空状态
-        if (this.emptyState) {
-            this.emptyState.style.display = 'none';
-        }
+        if (this.emptyState) this.emptyState.style.display = 'none';
 
-        // 为每个任务创建匹配卡片
-        tasks.forEach((task, index) => {
-            const card = this.createMatchCard(task, index);
+        for (var idx = 0; idx < tasks.length; idx++) {
+            var card = this.createMatchCard(tasks[idx], idx);
             this.matchContainer.appendChild(card);
-        });
-
-        console.log(`[DriverDisplay] 渲染了 ${tasks.length} 个匹配卡片`);
+        }
     }
 
-    /**
-     * 创建单个匹配卡片
-     * @param {Object} task - 任务对象
-     * @param {number} index - 索引（用于动画延迟）
-     * @returns {HTMLElement} 卡片DOM元素
-     */
     createMatchCard(task, index) {
-        const card = document.createElement('div');
+        var card = document.createElement('div');
         card.className = 'match-card';
-        card.style.animationDelay = `${index * 0.15}s`;
+        card.style.animationDelay = (index * 0.1) + 's';
 
-        // 缆机信息
-        const cableCarInfo = document.createElement('div');
-        cableCarInfo.className = 'cable-car-info';
-        cableCarInfo.innerHTML = `
-            <div class="cable-car-label">🏗️ 缆 机</div>
-            <div class="cable-car-number">${task.cable_car_id}号</div>
-            <div class="cable-car-grade">${task.grade_name || '未设置'}</div>
-        `;
+        var vehicleName = task.vehicle_name || '--';
+        var cableCarId = task.cable_car_id || '--';
+        var gradeName = task.grade_name || '';
 
-        // 中间箭头
-        const arrowContainer = document.createElement('div');
-        arrowContainer.className = 'match-arrow-container';
-        arrowContainer.innerHTML = `
-            <div class="arrow-line"></div>
-            <div class="arrow-head">➜</div>
-        `;
+        var vehicleSide = document.createElement('div');
+        vehicleSide.className = 'vehicle-info';
+        vehicleSide.innerHTML =
+            '<div class="vehicle-label">车 辆</div>' +
+            '<div class="vehicle-name">' + vehicleName + '</div>' +
+            (gradeName ? '<div class="vehicle-grade">' + gradeName + '</div>' : '');
 
-        // 车辆信息
-        const vehicleInfo = document.createElement('div');
-        vehicleInfo.className = 'vehicle-info';
-        vehicleInfo.innerHTML = `
-            <div class="vehicle-label">🚛 车 辆</div>
-            <div class="vehicle-name">${task.vehicle_name}</div>
-            <div class="vehicle-icon">🚛</div>
-        `;
+        var arrow = document.createElement('div');
+        arrow.className = 'match-arrow';
+        arrow.innerHTML =
+            '<div class="arrow-line"></div>' +
+            '<div class="arrow-symbol">▸</div>';
 
-        // 组装卡片
-        card.appendChild(cableCarInfo);
-        card.appendChild(arrowContainer);
-        card.appendChild(vehicleInfo);
+        var cableSide = document.createElement('div');
+        cableSide.className = 'cable-car-info';
+        cableSide.innerHTML =
+            '<div class="cable-car-label">目 标 缆 机</div>' +
+            '<div class="cable-car-number">' + cableCarId + '号</div>' +
+            (gradeName ? '<div class="cable-car-grade">' + gradeName + '</div>' : '');
+
+        card.appendChild(vehicleSide);
+        card.appendChild(arrow);
+        card.appendChild(cableSide);
 
         return card;
     }
 
-    /**
-     * 显示错误状态
-     */
     showError() {
-        if (this.loadingState) {
-            this.loadingState.style.display = 'none';
-        }
-        
+        if (this.loadingState) this.loadingState.style.display = 'none';
         if (this.emptyState) {
             this.emptyState.style.display = 'block';
-            const emptyTitle = this.emptyState.querySelector('.empty-title');
-            const emptyDesc = this.emptyState.querySelector('.empty-desc');
-            const emptyIcon = this.emptyState.querySelector('.empty-icon');
-            
-            if (emptyTitle) emptyTitle.textContent = '⚠️ 连接失败';
-            if (emptyDesc) emptyDesc.textContent = '无法连接到服务器，请检查网络...';
-            if (emptyIcon) emptyIcon.textContent = '❌';
+            var t = this.emptyState.querySelector('.empty-title');
+            var d = this.emptyState.querySelector('.empty-desc');
+            var ic = this.emptyState.querySelector('.empty-icon');
+            if (t) t.textContent = '连接失败';
+            if (d) d.textContent = '无法连接服务器';
+            if (ic) ic.textContent = '⚠';
         }
     }
 
-    /**
-     * 更新底部状态信息
-     * @param {boolean} success - 是否成功
-     */
     updateStatusInfo(success) {
         if (!this.updateInfoEl) return;
-
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString('zh-CN', { 
-            hour12: false,
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
-
+        var now = new Date();
+        var h = String(now.getHours()).padStart(2, '0');
+        var m = String(now.getMinutes()).padStart(2, '0');
+        var s = String(now.getSeconds()).padStart(2, '0');
+        var timeStr = h + ':' + m + ':' + s;
         if (success) {
-            this.updateInfoEl.textContent = `✓ 更新于 ${timeStr}`;
-            this.updateInfoEl.style.color = '#00FF41';
+            this.updateInfoEl.textContent = '已更新 ' + timeStr;
+            this.updateInfoEl.style.color = '';
         } else {
-            this.updateInfoEl.textContent = `✗ 更新失败 ${timeStr}`;
+            this.updateInfoEl.textContent = '更新失败 ' + timeStr;
             this.updateInfoEl.style.color = '#FF6B6B';
         }
     }
 }
 
-// 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function() {
     window.driverDisplay = new DriverDisplay();
 });
